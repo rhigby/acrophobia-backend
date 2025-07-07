@@ -15,18 +15,16 @@ const io = new Server(server, {
 
 const rooms = {} // { [roomCode]: { users: {}, entries: [], votes: {}, scores: {}, round: 1, phase: 'waiting' } }
 
-// Utility to generate a random acronym of given length
 function generateAcronym(length) {
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
   return Array.from({ length }, () => letters[Math.floor(Math.random() * letters.length)]).join('')
 }
 
-// Advance the game phases in order for the room
 function startRound(roomCode) {
   const room = rooms[roomCode]
   if (!room || room.round > 5) return
 
-  const acronymLength = 2 + room.round // 3 letters on round 1 up to 7 letters max
+  const acronymLength = 2 + room.round
   const acronym = generateAcronym(acronymLength)
   room.acronym = acronym
   room.entries = []
@@ -39,19 +37,17 @@ function startRound(roomCode) {
 
   setTimeout(() => {
     room.phase = 'vote'
+    io.to(roomCode).emit('entries', room.entries) // Ensure entries sent BEFORE phase update
     io.to(roomCode).emit('phase', 'vote')
-    io.to(roomCode).emit('entries', room.entries)
 
     setTimeout(() => {
       room.phase = 'results'
 
-      // Tally votes
       const voteCounts = {}
       Object.values(room.votes).forEach((id) => {
         voteCounts[id] = (voteCounts[id] || 0) + 1
       })
 
-      // Update scores
       room.entries.forEach((entry) => {
         const votes = voteCounts[entry.id] || 0
         room.scores[entry.username] = (room.scores[entry.username] || 0) + votes
@@ -62,10 +58,17 @@ function startRound(roomCode) {
       io.to(roomCode).emit('entries', room.entries)
       io.to(roomCode).emit('phase', 'results')
 
-      room.round++
-      setTimeout(() => startRound(roomCode), 5000) // next round
-    }, 30000) // 30s vote phase
-  }, 60000) // 60s submit phase
+      if (room.round >= 5) {
+        io.to(roomCode).emit('game_over', {
+          scores: room.scores,
+          winner: Object.entries(room.scores).sort((a, b) => b[1] - a[1])[0][0]
+        })
+      } else {
+        room.round++
+        setTimeout(() => startRound(roomCode), 5000)
+      }
+    }, 30000)
+  }, 60000)
 }
 
 io.on('connection', (socket) => {
@@ -93,11 +96,13 @@ io.on('connection', (socket) => {
       username,
       text,
     }
-    rooms[room]?.entries.push(entry)
+    if (rooms[room] && rooms[room].phase === 'submit') {
+      rooms[room].entries.push(entry)
+    }
   })
 
   socket.on('vote_entry', ({ room, entryId }) => {
-    if (rooms[room]) {
+    if (rooms[room] && rooms[room].phase === 'vote') {
       rooms[room].votes[socket.id] = entryId
     }
   })
@@ -106,5 +111,6 @@ io.on('connection', (socket) => {
 server.listen(3001, () => {
   console.log('Server running on http://localhost:3001')
 })
+
   
 
