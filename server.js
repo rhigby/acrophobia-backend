@@ -63,6 +63,11 @@ function startRound(roomCode) {
           scores: room.scores,
           winner: Object.entries(room.scores).sort((a, b) => b[1] - a[1])[0][0]
         })
+        room.phase = 'waiting'
+        room.round = 1
+        room.entries = []
+        room.votes = {}
+        room.scores = {}
       } else {
         room.round++
         setTimeout(() => startRound(roomCode), 5000)
@@ -111,6 +116,7 @@ io.on('connection', (socket) => {
 server.listen(3001, () => {
   console.log('Server running on http://localhost:3001')
 })
+
 
   
 
