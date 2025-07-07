@@ -1,72 +1,71 @@
-const express = require('express')
-const http = require('http')
-const { Server } = require('socket.io')
-const cors = require('cors')
+// Basic Express + Socket.io game backend logic
+import express from 'express'
+import http from 'http'
+import { Server } from 'socket.io'
+import cors from 'cors'
 
 const app = express()
 app.use(cors())
-
 const server = http.createServer(app)
 const io = new Server(server, {
   cors: {
-    origin: '*'
+    origin: '*',
   }
 })
 
-const rooms = {}
+const rooms = {} // { [roomCode]: { users: {}, entries: [], votes: {}, scores: {}, round: 1, phase: 'waiting' } }
 
-const PHASES = ['submit', 'vote', 'results', 'waiting']
-
-function generateAcronym() {
-  const length = Math.floor(Math.random() * 3) + 3
+// Utility to generate a random acronym of given length
+function generateAcronym(length) {
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-  let result = ''
-  for (let i = 0; i < length; i++) {
-    result += letters[Math.floor(Math.random() * letters.length)]
-  }
-  return result
+  return Array.from({ length }, () => letters[Math.floor(Math.random() * letters.length)]).join('')
 }
 
-function advancePhase(roomCode) {
+// Advance the game phases in order for the room
+function startRound(roomCode) {
   const room = rooms[roomCode]
-  if (!room) return
+  if (!room || room.round > 5) return
 
-  switch (room.phase) {
-    case 'waiting':
-    case 'results': {
-      room.acronym = generateAcronym()
-      room.entries = []
-      room.votes = {}
-      room.phase = 'submit'
-      io.to(roomCode).emit('acronym', room.acronym)
-      io.to(roomCode).emit('phase', 'submit')
-      setTimeout(() => advancePhase(roomCode), 30000)
-      break
-    }
-    case 'submit': {
-      room.phase = 'vote'
-      io.to(roomCode).emit('entries', room.entries)
-      io.to(roomCode).emit('phase', 'vote')
-      setTimeout(() => advancePhase(roomCode), 20000)
-      break
-    }
-    case 'vote': {
+  const acronymLength = 2 + room.round // 3 letters on round 1 up to 7 letters max
+  const acronym = generateAcronym(acronymLength)
+  room.acronym = acronym
+  room.entries = []
+  room.votes = {}
+  room.phase = 'submit'
+
+  io.to(roomCode).emit('round_number', room.round)
+  io.to(roomCode).emit('acronym', acronym)
+  io.to(roomCode).emit('phase', 'submit')
+
+  setTimeout(() => {
+    room.phase = 'vote'
+    io.to(roomCode).emit('phase', 'vote')
+    io.to(roomCode).emit('entries', room.entries)
+
+    setTimeout(() => {
       room.phase = 'results'
-      const voteCount = {}
-      for (const v of Object.values(room.votes)) {
-        voteCount[v] = (voteCount[v] || 0) + 1
-      }
-      for (const [player, entry] of room.entries.map(e => [e.username, e.id])) {
-        const votes = voteCount[entry] || 0
-        room.scores[player] = (room.scores[player] || 0) + votes
-      }
-      io.to(roomCode).emit('votes', voteCount)
+
+      // Tally votes
+      const voteCounts = {}
+      Object.values(room.votes).forEach((id) => {
+        voteCounts[id] = (voteCounts[id] || 0) + 1
+      })
+
+      // Update scores
+      room.entries.forEach((entry) => {
+        const votes = voteCounts[entry.id] || 0
+        room.scores[entry.username] = (room.scores[entry.username] || 0) + votes
+      })
+
+      io.to(roomCode).emit('votes', voteCounts)
       io.to(roomCode).emit('scores', room.scores)
+      io.to(roomCode).emit('entries', room.entries)
       io.to(roomCode).emit('phase', 'results')
-      setTimeout(() => advancePhase(roomCode), 15000)
-      break
-    }
-  }
+
+      room.round++
+      setTimeout(() => startRound(roomCode), 5000) // next round
+    }, 30000) // 30s vote phase
+  }, 60000) // 60s submit phase
 }
 
 io.on('connection', (socket) => {
@@ -74,42 +73,37 @@ io.on('connection', (socket) => {
     socket.join(room)
     if (!rooms[room]) {
       rooms[room] = {
-        players: {},
+        users: {},
         entries: [],
         votes: {},
         scores: {},
-        acronym: '',
-        phase: 'waiting'
+        round: 1,
+        phase: 'waiting',
       }
     }
-    rooms[room].players[socket.id] = username
+    rooms[room].users[socket.id] = username
     if (rooms[room].phase === 'waiting') {
-      advancePhase(room)
+      startRound(room)
     }
   })
 
   socket.on('submit_entry', ({ room, username, text }) => {
-    const roomData = rooms[room]
-    if (!roomData || roomData.phase !== 'submit') return
-    roomData.entries.push({ id: socket.id + Date.now(), username, text })
+    const entry = {
+      id: socket.id + '-' + Date.now(),
+      username,
+      text,
+    }
+    rooms[room]?.entries.push(entry)
   })
 
   socket.on('vote_entry', ({ room, entryId }) => {
-    const roomData = rooms[room]
-    if (!roomData || roomData.phase !== 'vote') return
-    roomData.votes[socket.id] = entryId
-  })
-
-  socket.on('disconnect', () => {
-    for (const roomCode in rooms) {
-      const room = rooms[roomCode]
-      if (room.players[socket.id]) {
-        delete room.players[socket.id]
-      }
+    if (rooms[room]) {
+      rooms[room].votes[socket.id] = entryId
     }
   })
 })
 
 server.listen(3001, () => {
-  console.log('Acrophobia server running on http://localhost:3001')
+  console.log('Server running on http://localhost:3001')
 })
+
