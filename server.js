@@ -49,9 +49,16 @@ function countdownPhase(roomCode, duration, phase, onEnd) {
 
 function startRound(roomCode) {
   const room = rooms[roomCode]
-  if (!room || room.state.active || room.users.length < 2) return
+  if (!room) return
 
-  console.log(`Starting round ${room.state.round + 1} in ${roomCode}`)
+  if (room.state.active) {
+    console.log(`Game already active in ${roomCode}`)
+    return
+  }
+  if (room.users.length < 2) {
+    console.log(`Not enough users to start game in ${roomCode}`)
+    return
+  }
 
   room.state.active = true
   room.state.phase = 'submit'
@@ -59,6 +66,8 @@ function startRound(roomCode) {
   room.state.votes = {}
   room.state.round++
   room.state.acronym = generateAcronym(room.state.round + 2)
+
+  console.log(`✅ Starting Round ${room.state.round} in ${roomCode} with acronym ${room.state.acronym}`)
 
   io.to(roomCode).emit('round_number', room.state.round)
   io.to(roomCode).emit('acronym', room.state.acronym)
@@ -91,12 +100,11 @@ function startRound(roomCode) {
         const users = rooms[roomCode].users
         rooms[roomCode] = createRoomState()
         rooms[roomCode].users = users
-        console.log(`Game over in ${roomCode}, room reset.`)
+        console.log(`🏁 Game over in ${roomCode}, winner: ${winner ? winner[0] : 'none'}`)
       } else {
-        // Reset phase and schedule next round
         room.state.phase = 'waiting'
         room.state.active = false
-        console.log(`Waiting before next round in ${roomCode}...`)
+        console.log(`⏳ Waiting before next round in ${roomCode}`)
         setTimeout(() => {
           const r = rooms[roomCode]
           if (r && r.users.length >= 2 && !r.state.active) {
@@ -143,8 +151,8 @@ io.on('connection', (socket) => {
     console.log(`${username} joined ${room}`)
     io.to(room).emit('player_joined', roomData.users.map(u => u.username))
 
-    // Start if conditions met
     if (roomData.users.length >= 2 && !roomData.state.active) {
+      console.log(`🟢 Enough users in ${room}, trying to start game...`)
       startRound(room)
     }
   })
@@ -175,8 +183,9 @@ io.on('connection', (socket) => {
 })
 
 server.listen(3001, () => {
-  console.log('Socket.io server running on port 3001')
+  console.log('✅ Socket.io server running on port 3001')
 })
+
 
 
 
