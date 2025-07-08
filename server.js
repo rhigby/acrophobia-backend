@@ -12,10 +12,7 @@ app.use(cors({
   credentials: true
 }));
 
-const server = http.createServer(app);Cross-Origin Request Blocked: The Same Origin Policy disallows reading the remote resource at https://acrophobia-backend-2.onrender.com/socket.io/?EIO=4&transport=polling&t=pq4a501s. (Reason: CORS header ‘Access-Control-Allow-Origin’ does not match ‘https://acrophobia-frontend.onrender.com’).
-
-Cross-Origin Request Blocked: The Same Origin Policy disallows reading the remote resource at https://acrophobia-backend-2.onrender.com/socket.io/?EIO=4&transport=polling&t=pq90rdsw. (Reason: CORS header ‘Access-Control-Allow-Origin’ does not match ‘https://acrophobia-frontend.onrender.com’).
-const io = new Server(server, {
+const server = http.createServer(app);
   cors: {
     origin: "https://acrophobia-play.onrender.com",
     methods: ["GET", "POST"]
