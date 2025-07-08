@@ -88,7 +88,9 @@ function startRound(roomCode) {
           scores,
           winner: winner ? winner[0] : null,
         })
-        rooms[roomCode] = createRoomState()
+        const users = rooms[roomCode].users;
+        rooms[roomCode] = createRoomState();
+        rooms[roomCode].users = users
       } else {
         // Reset phase and schedule next round
         room.state.phase = 'waiting'
@@ -166,6 +168,7 @@ io.on('connection', (socket) => {
 server.listen(3001, () => {
   console.log('Socket.io server running on port 3001')
 })
+
 
 
 
