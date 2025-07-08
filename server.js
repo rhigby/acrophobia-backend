@@ -4,9 +4,9 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
+
 const app = express();
 const server = http.createServer(app);
-
 const io = new Server(server, {
   cors: {
     origin: "*",
@@ -15,34 +15,52 @@ const io = new Server(server, {
 });
 
 const rooms = {};
+const MAX_PLAYERS = 10;
+const MAX_ROUNDS = 5;
 
 function createAcronym(length) {
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  let result = "";
-  for (let i = 0; i < length; i++) {
-    result += alphabet[Math.floor(Math.random() * alphabet.length)];
-  }
-  return result;
+  return Array.from({ length }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
+}
+
+function emitToRoom(roomId, event, data) {
+  io.to(roomId).emit(event, data);
+}
+
+function startCountdown(roomId, seconds, onComplete) {
+  let time = seconds;
+  const interval = setInterval(() => {
+    if (!rooms[roomId]) return clearInterval(interval);
+    if (time <= 10) emitToRoom(roomId, "beep");
+    emitToRoom(roomId, "countdown", time);
+    time--;
+    if (time < 0) {
+      clearInterval(interval);
+      onComplete();
+    }
+  }, 1000);
 }
 
 function startGame(roomId) {
   const room = rooms[roomId];
   if (!room || room.players.length < 2) return;
-
-  console.log(`✅ Game starting for room: ${roomId}`);
-
   room.round = 1;
+  room.scores = {};
+  runRound(roomId);
+}
+
+function runRound(roomId) {
+  const room = rooms[roomId];
+  if (!room) return;
+
   room.phase = "submit";
   room.entries = [];
   room.votes = {};
-  room.scores = room.scores || {};
+  room.acronym = createAcronym(room.round + 2);
 
-  const length = room.round + 2; // 3,4,5,6,7
-  room.acronym = createAcronym(length);
-
-  io.to(roomId).emit("round_number", room.round);
-  io.to(roomId).emit("phase", room.phase);
-  io.to(roomId).emit("acronym", room.acronym);
+  emitToRoom(roomId, "round_number", room.round);
+  emitToRoom(roomId, "phase", room.phase);
+  emitToRoom(roomId, "acronym", room.acronym);
 
   startCountdown(roomId, 60, () => startVoting(roomId));
 }
@@ -52,8 +70,8 @@ function startVoting(roomId) {
   if (!room) return;
 
   room.phase = "vote";
-  io.to(roomId).emit("phase", "vote");
-  io.to(roomId).emit("entries", room.entries);
+  emitToRoom(roomId, "phase", "vote");
+  emitToRoom(roomId, "entries", room.entries);
 
   startCountdown(roomId, 30, () => showResults(roomId));
 }
@@ -62,15 +80,9 @@ function showResults(roomId) {
   const room = rooms[roomId];
   if (!room) return;
 
-  room.phase = "results";
   const voteCounts = {};
   for (const vote of Object.values(room.votes)) {
-    if (!voteCounts[vote]) voteCounts[vote] = 0;
-    voteCounts[vote]++;
-  }
-
-  for (const [id, entry] of room.entries.map((e, i) => [e.id, e])) {
-    if (!voteCounts[id]) voteCounts[id] = 0;
+    voteCounts[vote] = (voteCounts[vote] || 0) + 1;
   }
 
   for (const entry of room.entries) {
@@ -78,39 +90,19 @@ function showResults(roomId) {
     room.scores[entry.username] += voteCounts[entry.id] || 0;
   }
 
-  io.to(roomId).emit("votes", voteCounts);
-  io.to(roomId).emit("scores", room.scores);
-  io.to(roomId).emit("phase", "results");
+  room.phase = "results";
+  emitToRoom(roomId, "votes", voteCounts);
+  emitToRoom(roomId, "scores", room.scores);
+  emitToRoom(roomId, "phase", "results");
 
   setTimeout(() => {
-    if (room.round < 5) {
+    if (room.round < MAX_ROUNDS) {
       room.round++;
-      room.phase = "submit";
-      room.entries = [];
-      room.votes = {};
-      const length = room.round + 2;
-      room.acronym = createAcronym(length);
-      io.to(roomId).emit("round_number", room.round);
-      io.to(roomId).emit("phase", "submit");
-      io.to(roomId).emit("acronym", room.acronym);
-      startCountdown(roomId, 60, () => startVoting(roomId));
+      runRound(roomId);
+    } else {
+      emitToRoom(roomId, "phase", "game_over");
     }
   }, 8000);
-}
-
-function startCountdown(roomId, seconds, callback) {
-  const room = rooms[roomId];
-  if (!room) return;
-  let remaining = seconds;
-  const interval = setInterval(() => {
-    if (remaining <= 10) io.to(roomId).emit("beep");
-    io.to(roomId).emit("countdown", remaining);
-    remaining--;
-    if (remaining < 0) {
-      clearInterval(interval);
-      callback();
-    }
-  }, 1000);
 }
 
 io.on("connection", (socket) => {
@@ -118,53 +110,51 @@ io.on("connection", (socket) => {
     if (!rooms[room]) {
       rooms[room] = {
         players: [],
-        entries: [],
-        votes: {},
         scores: {},
-        round: 0,
-        phase: "waiting"
+        phase: "waiting",
+        round: 0
       };
     }
     const r = rooms[room];
-    if (r.players.length >= 10) {
+
+    if (r.players.length >= MAX_PLAYERS) {
       socket.emit("room_full");
       return;
     }
+
     socket.join(room);
     socket.data.room = room;
     socket.data.username = username;
     r.players.push({ id: socket.id, username });
 
-    console.log(`[JOIN] ${username} joined room ${room}. Total players: ${r.players.length}`);
+    console.log(`[JOIN] ${username} joined ${room}`);
 
     if (r.players.length >= 2 && r.phase === "waiting") {
-      startGame(room); // ❌ BUG: passing room obj, not ID
+      r.phase = "submit";
+      startGame(room);
     }
   });
 
   socket.on("submit_entry", ({ room, username, text }) => {
-    const entry = {
-      id: `${Date.now()}-${Math.random()}`,
-      username,
-      text
-    };
-    rooms[room]?.entries.push(entry);
+    if (!rooms[room]) return;
+    const id = `${Date.now()}-${Math.random()}`;
+    rooms[room].entries.push({ id, username, text });
   });
 
   socket.on("vote_entry", ({ room, username, entryId }) => {
+    if (!rooms[room]) return;
     rooms[room].votes[username] = entryId;
   });
 
   socket.on("disconnect", () => {
     const room = socket.data.room;
     if (!room || !rooms[room]) return;
-    rooms[room].players = rooms[room].players.filter(
-      (p) => p.id !== socket.id
-    );
+    rooms[room].players = rooms[room].players.filter((p) => p.id !== socket.id);
   });
 });
 
-server.listen(3001, () => console.log("Server running on port 3001"));
+server.listen(3001, () => console.log("✅ Acrophobia backend running on port 3001"));
+
 
 
 
