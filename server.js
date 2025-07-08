@@ -11,7 +11,7 @@ app.use(cors());
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "https://acrophobia-frontend.onrender.com",
+    origin: "https://acrophobia-play.onrender.com",
     methods: ["GET", "POST"]
   }
 });
