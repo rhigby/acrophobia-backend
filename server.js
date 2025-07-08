@@ -1,5 +1,4 @@
 // backend/server.js
-
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -16,8 +15,7 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: "https://acrophobia-play.onrender.com",
-    methods: ["GET", "POST"],
-    credentials: true
+    methods: ["GET", "POST"]
   }
 });
 
@@ -93,9 +91,39 @@ function showResults(roomId) {
     voteCounts[vote] = (voteCounts[vote] || 0) + 1;
   }
 
+  let highestVotes = 0;
+  let winningEntryId = null;
+  const entryFirstVotes = new Set();
+
   for (const entry of room.entries) {
+    const count = voteCounts[entry.id] || 0;
     if (!room.scores[entry.username]) room.scores[entry.username] = 0;
-    room.scores[entry.username] += voteCounts[entry.id] || 0;
+    room.scores[entry.username] += count;
+
+    if (count > highestVotes) {
+      highestVotes = count;
+      winningEntryId = entry.id;
+    }
+  }
+
+  // First to submit AND receive at least one vote
+  for (const entry of room.entries) {
+    if (entry.id === winningEntryId && highestVotes > 0) {
+      room.scores[entry.username] += 5; // Bonus for most votes
+    }
+    if (!entryFirstVotes.has(entry.username) && voteCounts[entry.id]) {
+      entryFirstVotes.add(entry.username);
+      room.scores[entry.username] += 3; // First voted submitter bonus
+      break;
+    }
+  }
+
+  // Bonus for voters who voted for the winner
+  for (const [voter, entryId] of Object.entries(room.votes)) {
+    if (entryId === winningEntryId) {
+      if (!room.scores[voter]) room.scores[voter] = 0;
+      room.scores[voter] += 1;
+    }
   }
 
   room.phase = "results";
@@ -166,12 +194,13 @@ io.on("connection", (socket) => {
     if (!rooms[room]) return;
     const id = `${Date.now()}-${Math.random()}`;
     rooms[room].entries.push({ id, username, text });
-    io.to(socket.id).emit("entry_submitted");
+    socket.emit("entry_submitted");
   });
 
   socket.on("vote_entry", ({ room, username, entryId }) => {
     if (!rooms[room]) return;
     rooms[room].votes[username] = entryId;
+    socket.emit("vote_confirmed");
   });
 
   socket.on("disconnect", () => {
@@ -183,6 +212,7 @@ io.on("connection", (socket) => {
 });
 
 server.listen(3001, () => console.log("✅ Acrophobia backend running on port 3001"));
+
 
 
 
