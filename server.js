@@ -134,9 +134,14 @@ function showResults(roomId) {
     winner: winningEntryId,
     voters: votersOfWinner
   });
+  emitToRoom(roomId, "results_metadata", {
+    timestamps: room.entries.map(entry => ({ id: entry.id, username: entry.username, text: entry.text, time: entry.time }))
+  });
   emitToRoom(roomId, "phase", "results");
 
-  setTimeout(() => {
+  // Intermission
+  emitToRoom(roomId, "phase", "intermission");
+  startCountdown(roomId, 30, () => {
     if (room.round < MAX_ROUNDS) {
       room.round++;
       runRound(roomId);
@@ -156,7 +161,7 @@ function showResults(roomId) {
         }
       }, 30000);
     }
-  }, 8000);
+  });
 }
 
 io.on("connection", (socket) => {
@@ -197,7 +202,7 @@ io.on("connection", (socket) => {
   socket.on("submit_entry", ({ room, username, text }) => {
     if (!rooms[room]) return;
     const id = `${Date.now()}-${Math.random()}`;
-    rooms[room].entries.push({ id, username, text });
+    rooms[room].entries.push({ id, username, text, time: Date.now() });
     socket.emit("entry_submitted");
   });
 
@@ -216,6 +221,7 @@ io.on("connection", (socket) => {
 });
 
 server.listen(3001, () => console.log("✅ Acrophobia backend running on port 3001"));
+
 
 
 
