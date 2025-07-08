@@ -106,29 +106,34 @@ function showResults(roomId) {
     }
   }
 
-  // First to submit AND receive at least one vote
   for (const entry of room.entries) {
     if (entry.id === winningEntryId && highestVotes > 0) {
-      room.scores[entry.username] += 5; // Bonus for most votes
+      room.scores[entry.username] += 5;
     }
     if (!entryFirstVotes.has(entry.username) && voteCounts[entry.id]) {
       entryFirstVotes.add(entry.username);
-      room.scores[entry.username] += 3; // First voted submitter bonus
+      room.scores[entry.username] += 3;
       break;
     }
   }
 
-  // Bonus for voters who voted for the winner
+  const votersOfWinner = [];
   for (const [voter, entryId] of Object.entries(room.votes)) {
     if (entryId === winningEntryId) {
       if (!room.scores[voter]) room.scores[voter] = 0;
       room.scores[voter] += 1;
+      votersOfWinner.push(voter);
     }
   }
 
   room.phase = "results";
   emitToRoom(roomId, "votes", voteCounts);
   emitToRoom(roomId, "scores", room.scores);
+  emitToRoom(roomId, "highlight_results", {
+    fastest: room.entries[0]?.id,
+    winner: winningEntryId,
+    voters: votersOfWinner
+  });
   emitToRoom(roomId, "phase", "results");
 
   setTimeout(() => {
@@ -146,7 +151,6 @@ function showResults(roomId) {
         room.scores = {};
         emitToRoom(roomId, "phase", "waiting");
         emitToRoom(roomId, "players", room.players);
-
         if (room.players.length >= 2) {
           startGame(roomId);
         }
@@ -212,6 +216,7 @@ io.on("connection", (socket) => {
 });
 
 server.listen(3001, () => console.log("✅ Acrophobia backend running on port 3001"));
+
 
 
 
