@@ -74,7 +74,8 @@ function advancePhase(room) {
     Object.values(state.votes).forEach(id => {
       if (voteCounts[id] !== undefined) voteCounts[id]++
     })
-    io.to(room).emit('votes', voteCounts)
+    state.votes = voteCounts
+    io.to(room).emit('votes', state.votes)
     for (const e of state.entries) {
       const player = e.username
       if (!state.scores[player]) state.scores[player] = 0
@@ -140,6 +141,7 @@ io.on('connection', (socket) => {
 })
 
 server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`))
+
 
 
 
