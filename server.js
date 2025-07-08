@@ -4,7 +4,7 @@ import express from 'express'
 import cors from 'cors'
 
 const app = express()
-app.use(cors()) // ✅ Enable CORS for REST endpoints if needed
+app.use(cors())
 
 const server = createServer(app)
 const io = new Server(server, {
@@ -16,6 +16,12 @@ const io = new Server(server, {
 
 const MAX_USERS_PER_ROOM = 10
 const rooms = {}
+
+// Predefine 10 rooms
+const predefinedRooms = Array.from({ length: 10 }, (_, i) => `room${i + 1}`)
+predefinedRooms.forEach(room => {
+  rooms[room] = createRoomState()
+})
 
 function generateAcronym(length) {
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
@@ -62,7 +68,6 @@ function startRound(roomCode) {
     countdownPhase(roomCode, 30, 'vote', () => {
       room.state.phase = 'results'
 
-      // Tally votes
       const scores = room.state.scores
       for (const entry of room.state.entries) {
         const voteCount = Object.values(room.state.votes).filter(v => v === entry.id).length
@@ -103,19 +108,24 @@ function createRoomState() {
 
 io.on('connection', (socket) => {
   socket.on('join_room', ({ room, username }) => {
-    if (!rooms[room]) rooms[room] = createRoomState()
+    if (!predefinedRooms.includes(room)) {
+      socket.emit('invalid_room')
+      return
+    }
 
-    if (rooms[room].users.length >= MAX_USERS_PER_ROOM) {
+    const roomData = rooms[room]
+
+    if (roomData.users.length >= MAX_USERS_PER_ROOM) {
       socket.emit('room_full')
       return
     }
 
-    rooms[room].users.push({ id: socket.id, username })
+    roomData.users.push({ id: socket.id, username })
     socket.join(room)
 
     console.log(`${username} joined ${room}`)
 
-    if (rooms[room].users.length >= 2 && rooms[room].state.phase === 'waiting') {
+    if (roomData.users.length >= 2 && roomData.state.phase === 'waiting') {
       startRound(room)
     }
   })
@@ -134,11 +144,9 @@ io.on('connection', (socket) => {
   })
 
   socket.on('disconnect', () => {
-    for (const room in rooms) {
+    for (const room of predefinedRooms) {
       rooms[room].users = rooms[room].users.filter(u => u.id !== socket.id)
-      if (rooms[room].users.length === 0) {
-        delete rooms[room]
-      }
+      // Do not delete rooms — they're predefined
     }
   })
 })
@@ -146,6 +154,7 @@ io.on('connection', (socket) => {
 server.listen(3001, () => {
   console.log('Socket.io server running on port 3001')
 })
+
 
 
 
