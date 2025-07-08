@@ -203,13 +203,13 @@ io.on("connection", (socket) => {
     if (!rooms[room]) return;
     const id = `${Date.now()}-${Math.random()}`;
     rooms[room].entries.push({ id, username, text, time: Date.now() });
-    socket.emit("entry_submitted");
+    socket.emit("entry_submitted", { id, text });
   });
 
   socket.on("vote_entry", ({ room, username, entryId }) => {
     if (!rooms[room]) return;
     rooms[room].votes[username] = entryId;
-    socket.emit("vote_confirmed");
+    socket.emit("vote_confirmed", entryId);
   });
 
   socket.on("disconnect", () => {
@@ -221,6 +221,7 @@ io.on("connection", (socket) => {
 });
 
 server.listen(3001, () => console.log("✅ Acrophobia backend running on port 3001"));
+
 
 
 
