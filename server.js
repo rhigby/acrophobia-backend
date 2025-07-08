@@ -132,6 +132,8 @@ function createRoomState() {
 }
 
 io.on('connection', (socket) => {
+  console.log(`🔌 Socket connected: ${socket.id}`)
+
   socket.on('join_room', ({ room, username }) => {
     if (!predefinedRooms.includes(room)) {
       socket.emit('invalid_room')
@@ -185,6 +187,7 @@ io.on('connection', (socket) => {
 server.listen(3001, () => {
   console.log('✅ Socket.io server running on port 3001')
 })
+
 
 
 
