@@ -6,14 +6,15 @@ const { Server } = require("socket.io");
 const cors = require("cors");
 
 const app = express();
+app.use(cors()); // ✅ allow all origins
+
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "*",
+    origin: "http://localhost:5173", // ✅ Allow frontend origin
     methods: ["GET", "POST"]
   }
 });
-
 const rooms = {};
 const MAX_PLAYERS = 10;
 const MAX_ROUNDS = 5;
