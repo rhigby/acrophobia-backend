@@ -51,6 +51,9 @@ function startRound(roomCode) {
   const room = rooms[roomCode]
   if (!room) return
 
+  // prevent multiple starts
+  if (room.state.phase !== 'waiting') return
+
   room.state.phase = 'submit'
   room.state.entries = []
   room.state.votes = {}
@@ -86,6 +89,8 @@ function startRound(roomCode) {
         })
         room.state = createRoomState()
       } else {
+        // reset phase to waiting briefly, then restart round
+        room.state.phase = 'waiting'
         setTimeout(() => startRound(roomCode), 5000)
       }
     })
@@ -125,7 +130,7 @@ io.on('connection', (socket) => {
 
     console.log(`${username} joined ${room}`)
 
-    // Start game immediately if not already started
+    // Start game immediately if not already started and enough players
     if (roomData.state.phase === 'waiting' && roomData.users.length >= 2) {
       startRound(room)
     }
@@ -155,6 +160,7 @@ io.on('connection', (socket) => {
 server.listen(3001, () => {
   console.log('Socket.io server running on port 3001')
 })
+
 
 
 
