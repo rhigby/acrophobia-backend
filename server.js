@@ -29,6 +29,8 @@ function startGame(roomId) {
   const room = rooms[roomId];
   if (!room || room.players.length < 2) return;
 
+  console.log(`✅ Game starting for room: ${roomId}`);
+
   room.round = 1;
   room.phase = "submit";
   room.entries = [];
@@ -133,8 +135,10 @@ io.on("connection", (socket) => {
     socket.data.username = username;
     r.players.push({ id: socket.id, username });
 
+    console.log(`[JOIN] ${username} joined room ${room}. Total players: ${r.players.length}`);
+
     if (r.players.length >= 2 && r.phase === "waiting") {
-      startGame(room);
+      startGame(room); // ❌ BUG: passing room obj, not ID
     }
   });
 
@@ -161,6 +165,7 @@ io.on("connection", (socket) => {
 });
 
 server.listen(3001, () => console.log("Server running on port 3001"));
+
 
 
 
