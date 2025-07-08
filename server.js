@@ -49,7 +49,7 @@ function countdownPhase(roomCode, duration, phase, onEnd) {
 
 function startRound(roomCode) {
   const room = rooms[roomCode]
-  if (!room || room.state.active) return
+  if (!room || room.state.active || room.users.length < 2) return
 
   console.log(`Starting round ${room.state.round + 1} in ${roomCode}`)
 
@@ -88,15 +88,18 @@ function startRound(roomCode) {
           scores,
           winner: winner ? winner[0] : null,
         })
-        const users = rooms[roomCode].users;
-        rooms[roomCode] = createRoomState();
+        const users = rooms[roomCode].users
+        rooms[roomCode] = createRoomState()
         rooms[roomCode].users = users
+        console.log(`Game over in ${roomCode}, room reset.`)
       } else {
         // Reset phase and schedule next round
         room.state.phase = 'waiting'
         room.state.active = false
+        console.log(`Waiting before next round in ${roomCode}...`)
         setTimeout(() => {
-          if (rooms[roomCode].users.length >= 2) {
+          const r = rooms[roomCode]
+          if (r && r.users.length >= 2 && !r.state.active) {
             startRound(roomCode)
           }
         }, 5000)
@@ -138,7 +141,9 @@ io.on('connection', (socket) => {
     socket.join(room)
 
     console.log(`${username} joined ${room}`)
+    io.to(room).emit('player_joined', roomData.users.map(u => u.username))
 
+    // Start if conditions met
     if (roomData.users.length >= 2 && !roomData.state.active) {
       startRound(room)
     }
@@ -160,7 +165,11 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     for (const room of predefinedRooms) {
       const roomData = rooms[room]
+      const prevCount = roomData.users.length
       roomData.users = roomData.users.filter(u => u.id !== socket.id)
+      if (roomData.users.length !== prevCount) {
+        io.to(room).emit('player_joined', roomData.users.map(u => u.username))
+      }
     }
   })
 })
@@ -168,6 +177,7 @@ io.on('connection', (socket) => {
 server.listen(3001, () => {
   console.log('Socket.io server running on port 3001')
 })
+
 
 
 
