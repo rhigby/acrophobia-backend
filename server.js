@@ -11,7 +11,7 @@ app.use(cors());
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "*",
+    origin: "https://acrophobia-frontend.onrender.com",
     methods: ["GET", "POST"]
   }
 });
@@ -75,7 +75,6 @@ function startVoting(roomId) {
   room.phase = "vote";
   emitToRoom(roomId, "phase", "vote");
   emitToRoom(roomId, "entries", room.entries);
-  emitToRoom(roomId, "players", room.players);
 
   startCountdown(roomId, 30, () => showResults(roomId));
 }
@@ -98,7 +97,6 @@ function showResults(roomId) {
   emitToRoom(roomId, "votes", voteCounts);
   emitToRoom(roomId, "scores", room.scores);
   emitToRoom(roomId, "phase", "results");
-  emitToRoom(roomId, "players", room.players);
 
   setTimeout(() => {
     if (room.round < MAX_ROUNDS) {
@@ -106,6 +104,21 @@ function showResults(roomId) {
       runRound(roomId);
     } else {
       emitToRoom(roomId, "phase", "game_over");
+      // ⏳ 30-second intermission before restarting
+      setTimeout(() => {
+        room.phase = "waiting";
+        room.round = 0;
+        room.entries = [];
+        room.votes = {};
+        room.acronym = "";
+        room.scores = {};
+        emitToRoom(roomId, "phase", "waiting");
+        emitToRoom(roomId, "players", room.players);
+
+        if (room.players.length >= 2) {
+          startGame(roomId);
+        }
+      }, 30000);
     }
   }, 8000);
 }
@@ -117,7 +130,10 @@ io.on("connection", (socket) => {
         players: [],
         scores: {},
         phase: "waiting",
-        round: 0
+        round: 0,
+        entries: [],
+        votes: [],
+        acronym: ""
       };
     }
     const r = rooms[room];
@@ -133,6 +149,8 @@ io.on("connection", (socket) => {
     r.players.push({ id: socket.id, username });
 
     console.log(`[JOIN] ${username} joined ${room}`);
+
+    emitToRoom(room, "players", r.players);
 
     if (r.players.length >= 2 && r.phase === "waiting") {
       r.phase = "submit";
@@ -155,10 +173,12 @@ io.on("connection", (socket) => {
     const room = socket.data.room;
     if (!room || !rooms[room]) return;
     rooms[room].players = rooms[room].players.filter((p) => p.id !== socket.id);
+    emitToRoom(room, "players", rooms[room].players);
   });
 });
 
 server.listen(3001, () => console.log("✅ Acrophobia backend running on port 3001"));
+
 
 
 
