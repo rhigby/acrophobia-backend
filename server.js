@@ -6,15 +6,16 @@ const { Server } = require("socket.io");
 const cors = require("cors");
 
 const app = express();
-app.use(cors()); // ✅ allow all origins
+app.use(cors());
 
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "*", // 🚨 TEMPORARY for development. See note below.
+    origin: "*",
     methods: ["GET", "POST"]
   }
 });
+
 const rooms = {};
 const MAX_PLAYERS = 10;
 const MAX_ROUNDS = 5;
@@ -62,6 +63,7 @@ function runRound(roomId) {
   emitToRoom(roomId, "round_number", room.round);
   emitToRoom(roomId, "phase", room.phase);
   emitToRoom(roomId, "acronym", room.acronym);
+  emitToRoom(roomId, "players", room.players);
 
   startCountdown(roomId, 60, () => startVoting(roomId));
 }
@@ -73,6 +75,7 @@ function startVoting(roomId) {
   room.phase = "vote";
   emitToRoom(roomId, "phase", "vote");
   emitToRoom(roomId, "entries", room.entries);
+  emitToRoom(roomId, "players", room.players);
 
   startCountdown(roomId, 30, () => showResults(roomId));
 }
@@ -95,6 +98,7 @@ function showResults(roomId) {
   emitToRoom(roomId, "votes", voteCounts);
   emitToRoom(roomId, "scores", room.scores);
   emitToRoom(roomId, "phase", "results");
+  emitToRoom(roomId, "players", room.players);
 
   setTimeout(() => {
     if (room.round < MAX_ROUNDS) {
@@ -155,6 +159,7 @@ io.on("connection", (socket) => {
 });
 
 server.listen(3001, () => console.log("✅ Acrophobia backend running on port 3001"));
+
 
 
 
