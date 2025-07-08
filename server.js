@@ -11,7 +11,7 @@ app.use(cors()); // ✅ allow all origins
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:5173", // ✅ Allow frontend origin
+    origin: "*", // 🚨 TEMPORARY for development. See note below.
     methods: ["GET", "POST"]
   }
 });
