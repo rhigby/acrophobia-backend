@@ -166,6 +166,7 @@ io.on("connection", (socket) => {
     if (!rooms[room]) return;
     const id = `${Date.now()}-${Math.random()}`;
     rooms[room].entries.push({ id, username, text });
+    io.to(socket.id).emit("entry_submitted");
   });
 
   socket.on("vote_entry", ({ room, username, entryId }) => {
@@ -182,6 +183,7 @@ io.on("connection", (socket) => {
 });
 
 server.listen(3001, () => console.log("✅ Acrophobia backend running on port 3001"));
+
 
 
 
