@@ -49,6 +49,7 @@ function startCountdown(roomId, seconds, onComplete) {
 function startGame(roomId) {
   const room = rooms[roomId];
   if (!room || room.players.length < 2) return;
+  console.log(`🚀 Starting game for room: ${roomId}`);
   room.round = 1;
   room.scores = {};
   runRound(roomId);
@@ -190,11 +191,9 @@ io.on("connection", (socket) => {
     r.players.push({ id: socket.id, username });
 
     console.log(`[JOIN] ${username} joined ${room}`);
-
     emitToRoom(room, "players", r.players);
 
     if (r.players.length >= 2 && r.phase === "waiting") {
-      r.phase = "submit";
       startGame(room);
     }
   });
@@ -221,6 +220,7 @@ io.on("connection", (socket) => {
 });
 
 server.listen(3001, () => console.log("✅ Acrophobia backend running on port 3001"));
+
 
 
 
