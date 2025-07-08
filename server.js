@@ -13,9 +13,11 @@ app.use(cors({
 }));
 
 const server = http.createServer(app);
+const io = new Server(server, {
   cors: {
     origin: "https://acrophobia-play.onrender.com",
-    methods: ["GET", "POST"]
+    methods: ["GET", "POST"],
+    credentials: true
   }
 });
 
@@ -107,7 +109,6 @@ function showResults(roomId) {
       runRound(roomId);
     } else {
       emitToRoom(roomId, "phase", "game_over");
-      // ⏳ 30-second intermission before restarting
       setTimeout(() => {
         room.phase = "waiting";
         room.round = 0;
@@ -135,7 +136,7 @@ io.on("connection", (socket) => {
         phase: "waiting",
         round: 0,
         entries: [],
-        votes: [],
+        votes: {},
         acronym: ""
       };
     }
@@ -181,6 +182,7 @@ io.on("connection", (socket) => {
 });
 
 server.listen(3001, () => console.log("✅ Acrophobia backend running on port 3001"));
+
 
 
 
