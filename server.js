@@ -1,146 +1,167 @@
-// This is a full backend update for correct vote ID tracking
-const express = require('express')
-const http = require('http')
-const { Server } = require('socket.io')
-const cors = require('cors')
+// backend/server.js
 
-const app = express()
-app.use(cors())
-const server = http.createServer(app)
+const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
+const cors = require("cors");
+const app = express();
+const server = http.createServer(app);
+
 const io = new Server(server, {
   cors: {
-    origin: '*',
-    methods: ['GET', 'POST']
+    origin: "*",
+    methods: ["GET", "POST"]
   }
-})
+});
 
-const PORT = process.env.PORT || 3001
+const rooms = {};
 
-const rooms = {}
-
-function createRoomState() {
-  return {
-    users: [],
-    scores: {},
-    phase: 'waiting',
-    entries: [],
-    votes: {},
-    round: 0,
-    acronym: '',
-    countdown: null,
-    roundTimeout: null
+function createAcronym(length) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  let result = "";
+  for (let i = 0; i < length; i++) {
+    result += alphabet[Math.floor(Math.random() * alphabet.length)];
   }
+  return result;
 }
 
-function generateAcronym(length) {
-  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-  return Array.from({ length }, () => letters[Math.floor(Math.random() * 26)]).join('')
+function startGame(roomId) {
+  const room = rooms[roomId];
+  if (!room || room.players.length < 2) return;
+
+  room.round = 1;
+  room.phase = "submit";
+  room.entries = [];
+  room.votes = {};
+  room.scores = room.scores || {};
+
+  const length = room.round + 2; // 3,4,5,6,7
+  room.acronym = createAcronym(length);
+
+  io.to(roomId).emit("round_number", room.round);
+  io.to(roomId).emit("phase", room.phase);
+  io.to(roomId).emit("acronym", room.acronym);
+
+  startCountdown(roomId, 60, () => startVoting(roomId));
 }
 
-function broadcastRoomState(room) {
-  const state = rooms[room]
-  if (!state) return
-  io.to(room).emit('phase', state.phase)
-  io.to(room).emit('acronym', state.acronym)
-  io.to(room).emit('round_number', state.round)
-  io.to(room).emit('entries', state.entries)
-  io.to(room).emit('votes', state.votes)
-  io.to(room).emit('scores', state.scores)
+function startVoting(roomId) {
+  const room = rooms[roomId];
+  if (!room) return;
+
+  room.phase = "vote";
+  io.to(roomId).emit("phase", "vote");
+  io.to(roomId).emit("entries", room.entries);
+
+  startCountdown(roomId, 30, () => showResults(roomId));
 }
 
-function advancePhase(room) {
-  const state = rooms[room]
-  if (!state) return
+function showResults(roomId) {
+  const room = rooms[roomId];
+  if (!room) return;
 
-  clearTimeout(state.roundTimeout)
+  room.phase = "results";
+  const voteCounts = {};
+  for (const vote of Object.values(room.votes)) {
+    if (!voteCounts[vote]) voteCounts[vote] = 0;
+    voteCounts[vote]++;
+  }
 
-  if (state.phase === 'waiting' || state.phase === 'results') {
-    state.round += 1
-    const length = 2 + state.round
-    state.acronym = generateAcronym(length)
-    state.entries = []
-    state.votes = {}
-    state.phase = 'submit'
-    broadcastRoomState(room)
-    startCountdown(room, 60, () => advancePhase(room))
-  } else if (state.phase === 'submit') {
-    state.phase = 'vote'
-    broadcastRoomState(room)
-    startCountdown(room, 30, () => advancePhase(room))
-  } else if (state.phase === 'vote') {
-    state.phase = 'results'
-    const voteCounts = {}
-    state.entries.forEach(e => voteCounts[e.id] = 0)
-    Object.values(state.votes).forEach(id => {
-      if (voteCounts[id] !== undefined) voteCounts[id]++
-    })
-    state.votes = voteCounts
-    io.to(room).emit('votes', state.votes)
-    for (const e of state.entries) {
-      const player = e.username
-      if (!state.scores[player]) state.scores[player] = 0
-      state.scores[player] += voteCounts[e.id] || 0
+  for (const [id, entry] of room.entries.map((e, i) => [e.id, e])) {
+    if (!voteCounts[id]) voteCounts[id] = 0;
+  }
+
+  for (const entry of room.entries) {
+    if (!room.scores[entry.username]) room.scores[entry.username] = 0;
+    room.scores[entry.username] += voteCounts[entry.id] || 0;
+  }
+
+  io.to(roomId).emit("votes", voteCounts);
+  io.to(roomId).emit("scores", room.scores);
+  io.to(roomId).emit("phase", "results");
+
+  setTimeout(() => {
+    if (room.round < 5) {
+      room.round++;
+      room.phase = "submit";
+      room.entries = [];
+      room.votes = {};
+      const length = room.round + 2;
+      room.acronym = createAcronym(length);
+      io.to(roomId).emit("round_number", room.round);
+      io.to(roomId).emit("phase", "submit");
+      io.to(roomId).emit("acronym", room.acronym);
+      startCountdown(roomId, 60, () => startVoting(roomId));
     }
-    broadcastRoomState(room)
-    startCountdown(room, 8, () => {
-      if (state.round >= 5) {
-        state.phase = 'game_over'
-        const maxScore = Math.max(...Object.values(state.scores))
-        const winner = Object.entries(state.scores).find(([_, score]) => score === maxScore)[0]
-        io.to(room).emit('game_over', { scores: state.scores, winner })
-      } else {
-        advancePhase(room)
-      }
-    })
-  }
+  }, 8000);
 }
 
-function startCountdown(room, duration, onEnd) {
-  let counter = duration
+function startCountdown(roomId, seconds, callback) {
+  const room = rooms[roomId];
+  if (!room) return;
+  let remaining = seconds;
   const interval = setInterval(() => {
-    rooms[room].countdown = counter
-    io.to(room).emit('countdown', counter)
-    if (counter <= 10) io.to(room).emit('beep')
-    counter--
-    if (counter < 0) {
-      clearInterval(interval)
-      rooms[room].countdown = null
-      io.to(room).emit('countdown', null)
-      onEnd()
+    if (remaining <= 10) io.to(roomId).emit("beep");
+    io.to(roomId).emit("countdown", remaining);
+    remaining--;
+    if (remaining < 0) {
+      clearInterval(interval);
+      callback();
     }
-  }, 1000)
-  rooms[room].roundTimeout = interval
+  }, 1000);
 }
 
-io.on('connection', (socket) => {
-  socket.on('join_room', ({ room, username }) => {
-    if (!rooms[room]) rooms[room] = createRoomState()
-    if (rooms[room].users.length >= 10) return socket.emit('room_full')
-    if (!rooms[room].users.includes(username)) rooms[room].users.push(username)
-    rooms[room].scores[username] = 0
-    socket.join(room)
-    io.to(room).emit('player_joined', rooms[room].users)
-    if (rooms[room].users.length >= 2 && rooms[room].phase === 'waiting') {
-      advancePhase(room)
+io.on("connection", (socket) => {
+  socket.on("join_room", ({ room, username }) => {
+    if (!rooms[room]) {
+      rooms[room] = {
+        players: [],
+        entries: [],
+        votes: {},
+        scores: {},
+        round: 0,
+        phase: "waiting"
+      };
     }
-  })
+    const r = rooms[room];
+    if (r.players.length >= 10) {
+      socket.emit("room_full");
+      return;
+    }
+    socket.join(room);
+    socket.data.room = room;
+    socket.data.username = username;
+    r.players.push({ id: socket.id, username });
 
-  socket.on('submit_entry', ({ room, username, text }) => {
-    const state = rooms[room]
-    if (!state) return
-    const id = `${username}-${Date.now()}`
-    state.entries.push({ id, username, text })
-    io.to(room).emit('entries', state.entries)
-  })
+    if (r.players.length >= 2 && r.phase === "waiting") {
+      startGame(room);
+    }
+  });
 
-  socket.on('vote_entry', ({ room, username, entryId }) => {
-    const state = rooms[room]
-    if (!state) return
-    state.votes[username] = entryId
-  })
-})
+  socket.on("submit_entry", ({ room, username, text }) => {
+    const entry = {
+      id: `${Date.now()}-${Math.random()}`,
+      username,
+      text
+    };
+    rooms[room]?.entries.push(entry);
+  });
 
-server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`))
+  socket.on("vote_entry", ({ room, username, entryId }) => {
+    rooms[room].votes[username] = entryId;
+  });
+
+  socket.on("disconnect", () => {
+    const room = socket.data.room;
+    if (!room || !rooms[room]) return;
+    rooms[room].players = rooms[room].players.filter(
+      (p) => p.id !== socket.id
+    );
+  });
+});
+
+server.listen(3001, () => console.log("Server running on port 3001"));
+
 
 
 
