@@ -49,12 +49,11 @@ function countdownPhase(roomCode, duration, phase, onEnd) {
 
 function startRound(roomCode) {
   const room = rooms[roomCode]
-  if (!room) return
-  if (room.state.phase !== 'waiting') return
+  if (!room || room.state.active) return
 
   console.log(`Starting round ${room.state.round + 1} in ${roomCode}`)
 
-  // Transition to submit phase
+  room.state.active = true
   room.state.phase = 'submit'
   room.state.entries = []
   room.state.votes = {}
@@ -89,10 +88,11 @@ function startRound(roomCode) {
           scores,
           winner: winner ? winner[0] : null,
         })
-        room.state = createRoomState()
+        rooms[roomCode] = createRoomState()
       } else {
         // Reset phase and schedule next round
         room.state.phase = 'waiting'
+        room.state.active = false
         setTimeout(() => {
           if (rooms[roomCode].users.length >= 2) {
             startRound(roomCode)
@@ -110,6 +110,7 @@ function createRoomState() {
       round: 0,
       acronym: '',
       phase: 'waiting',
+      active: false,
       entries: [],
       votes: {},
       scores: {},
@@ -136,7 +137,7 @@ io.on('connection', (socket) => {
 
     console.log(`${username} joined ${room}`)
 
-    if (roomData.state.phase === 'waiting' && roomData.users.length >= 2) {
+    if (roomData.users.length >= 2 && !roomData.state.active) {
       startRound(room)
     }
   })
@@ -165,6 +166,7 @@ io.on('connection', (socket) => {
 server.listen(3001, () => {
   console.log('Socket.io server running on port 3001')
 })
+
 
 
 
