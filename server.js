@@ -125,7 +125,8 @@ io.on('connection', (socket) => {
 
     console.log(`${username} joined ${room}`)
 
-    if (roomData.users.length >= 2 && roomData.state.phase === 'waiting') {
+    // Start game immediately if not already started
+    if (roomData.state.phase === 'waiting' && roomData.users.length >= 2) {
       startRound(room)
     }
   })
@@ -145,8 +146,8 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     for (const room of predefinedRooms) {
-      rooms[room].users = rooms[room].users.filter(u => u.id !== socket.id)
-      // Do not delete rooms — they're predefined
+      const roomData = rooms[room]
+      roomData.users = roomData.users.filter(u => u.id !== socket.id)
     }
   })
 })
@@ -154,6 +155,7 @@ io.on('connection', (socket) => {
 server.listen(3001, () => {
   console.log('Socket.io server running on port 3001')
 })
+
 
 
 
