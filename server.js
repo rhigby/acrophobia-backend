@@ -26,6 +26,21 @@ function generateAcronym(length) {
   return result
 }
 
+function countdownPhase(roomCode, duration, phase, onEnd) {
+  let secondsLeft = duration
+  const interval = setInterval(() => {
+    io.to(roomCode).emit('countdown', secondsLeft)
+    if (secondsLeft <= 10) {
+      io.to(roomCode).emit('beep')
+    }
+    if (secondsLeft <= 0) {
+      clearInterval(interval)
+      onEnd()
+    }
+    secondsLeft--
+  }, 1000)
+}
+
 function startRound(roomCode) {
   const room = rooms[roomCode]
   if (!room) return
@@ -39,12 +54,12 @@ function startRound(roomCode) {
   io.to(roomCode).emit('acronym', room.state.acronym)
   io.to(roomCode).emit('phase', 'submit')
 
-  setTimeout(() => {
+  countdownPhase(roomCode, 60, 'submit', () => {
     room.state.phase = 'vote'
     io.to(roomCode).emit('phase', 'vote')
     io.to(roomCode).emit('entries', room.state.entries)
 
-    setTimeout(() => {
+    countdownPhase(roomCode, 30, 'vote', () => {
       room.state.phase = 'results'
 
       // Tally votes
@@ -68,8 +83,8 @@ function startRound(roomCode) {
       } else {
         setTimeout(() => startRound(roomCode), 5000)
       }
-    }, 30000)
-  }, 60000)
+    })
+  })
 }
 
 function createRoomState() {
@@ -131,6 +146,7 @@ io.on('connection', (socket) => {
 server.listen(3001, () => {
   console.log('Socket.io server running on port 3001')
 })
+
 
 
 
