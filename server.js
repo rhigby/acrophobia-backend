@@ -83,7 +83,7 @@ function startVoting(roomId) {
   startCountdown(roomId, 30, () => showResults(roomId));
 }
 
-function showResults(roomId) {
+function calculateAndEmitResults(roomId) {
   const room = rooms[roomId];
   if (!room) return;
 
@@ -95,6 +95,8 @@ function showResults(roomId) {
   let highestVotes = 0;
   let winningEntryId = null;
   const entryFirstVotes = new Set();
+  const submitTimes = room.entries.map(e => e.time);
+  const firstVoteEntry = room.entries.find(entry => voteCounts[entry.id]);
 
   for (const entry of room.entries) {
     const count = voteCounts[entry.id] || 0;
@@ -107,15 +109,13 @@ function showResults(roomId) {
     }
   }
 
-  for (const entry of room.entries) {
-    if (entry.id === winningEntryId && highestVotes > 0) {
-      room.scores[entry.username] += 5;
-    }
-    if (!entryFirstVotes.has(entry.username) && voteCounts[entry.id]) {
-      entryFirstVotes.add(entry.username);
-      room.scores[entry.username] += 3;
-      break;
-    }
+  if (firstVoteEntry) {
+    room.scores[firstVoteEntry.username] += 3;
+  }
+
+  if (winningEntryId && highestVotes > 0) {
+    const winnerEntry = room.entries.find(e => e.id === winningEntryId);
+    if (winnerEntry) room.scores[winnerEntry.username] += 5;
   }
 
   const votersOfWinner = [];
@@ -131,18 +131,29 @@ function showResults(roomId) {
   emitToRoom(roomId, "votes", voteCounts);
   emitToRoom(roomId, "scores", room.scores);
   emitToRoom(roomId, "highlight_results", {
-    fastest: room.entries[0]?.id,
+    fastest: firstVoteEntry?.id,
     winner: winningEntryId,
     voters: votersOfWinner
   });
   emitToRoom(roomId, "results_metadata", {
-    timestamps: room.entries.map(entry => ({ id: entry.id, username: entry.username, text: entry.text, time: entry.time }))
+    timestamps: room.entries.map(entry => ({
+      id: entry.id,
+      username: entry.username,
+      text: entry.text,
+      time: ((entry.time - submitTimes[0]) / 1000).toFixed(2) // seconds since first
+    }))
   });
   emitToRoom(roomId, "phase", "results");
+}
+
+function showResults(roomId) {
+  calculateAndEmitResults(roomId);
 
   startCountdown(roomId, 10, () => {
     emitToRoom(roomId, "phase", "intermission");
     startCountdown(roomId, 30, () => {
+      const room = rooms[roomId];
+      if (!room) return;
       if (room.round < MAX_ROUNDS) {
         room.round++;
         runRound(roomId);
@@ -221,6 +232,7 @@ io.on("connection", (socket) => {
 });
 
 server.listen(3001, () => console.log("✅ Acrophobia backend running on port 3001"));
+
 
 
 
