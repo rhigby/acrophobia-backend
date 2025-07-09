@@ -140,28 +140,29 @@ function showResults(roomId) {
   });
   emitToRoom(roomId, "phase", "results");
 
-  // Intermission
-  emitToRoom(roomId, "phase", "intermission");
-  startCountdown(roomId, 30, () => {
-    if (room.round < MAX_ROUNDS) {
-      room.round++;
-      runRound(roomId);
-    } else {
-      emitToRoom(roomId, "phase", "game_over");
-      setTimeout(() => {
-        room.phase = "waiting";
-        room.round = 0;
-        room.entries = [];
-        room.votes = {};
-        room.acronym = "";
-        room.scores = {};
-        emitToRoom(roomId, "phase", "waiting");
-        emitToRoom(roomId, "players", room.players);
-        if (room.players.length >= 2) {
-          startGame(roomId);
-        }
-      }, 30000);
-    }
+  startCountdown(roomId, 10, () => {
+    emitToRoom(roomId, "phase", "intermission");
+    startCountdown(roomId, 30, () => {
+      if (room.round < MAX_ROUNDS) {
+        room.round++;
+        runRound(roomId);
+      } else {
+        emitToRoom(roomId, "phase", "game_over");
+        setTimeout(() => {
+          room.phase = "waiting";
+          room.round = 0;
+          room.entries = [];
+          room.votes = {};
+          room.acronym = "";
+          room.scores = {};
+          emitToRoom(roomId, "phase", "waiting");
+          emitToRoom(roomId, "players", room.players);
+          if (room.players.length >= 2) {
+            startGame(roomId);
+          }
+        }, 30000);
+      }
+    });
   });
 }
 
@@ -220,6 +221,7 @@ io.on("connection", (socket) => {
 });
 
 server.listen(3001, () => console.log("✅ Acrophobia backend running on port 3001"));
+
 
 
 
