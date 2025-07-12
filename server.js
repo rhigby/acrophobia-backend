@@ -325,7 +325,7 @@ io.on("connection", (socket) => {
   if (!roomData) return;
 
   const id = `${Date.now()}-${Math.random()}`;
-  const elapsed = Date.now() - (roomData.roundStartTime || Date.now());
+  const elapsed = Date.now() - (roomData.roundStartTime);
   const entry = { id, username, text, time: Date.now(), elapsed };
 
   roomData.entries.push(entry);
