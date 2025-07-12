@@ -282,22 +282,6 @@ io.on("connection", (socket) => {
   }
 });
 
-
-socket.on("chat_message", ({ room, from, message, to }) => {
-  if (!rooms[room]) return;
-  if (to) {
-    // Private message
-    const recipient = rooms[room].players.find(p => p.username === to);
-    if (recipient) {
-      io.to(recipient.id).emit("chat_message", { from, message, isPrivate: true });
-    }
-  } else {
-    // Public message
-    emitToRoom(room, "chat_message", { from, message, isPrivate: false });
-  }
-});
-
-  
   socket.on("chat_message", ({ room, from, message, to }) => {
   if (!rooms[room]) return;
   if (to) {
@@ -313,13 +297,23 @@ socket.on("chat_message", ({ room, from, message, to }) => {
 });
 
 
-  socket.on("submit_entry", ({ room, username, text }) => {
-    if (!rooms[room]) return;
-    const id = `${Date.now()}-${Math.random()}`;
-    const elapsed = Date.now() - rooms[room].roundStartTime;
-    rooms[room].entries.push({ id, username, text, time: Date.now(), elapsed });
-    socket.emit("entry_submitted", { id, text });
-  });
+ socket.on("submit_entry", ({ room, username, text }) => {
+  const roomData = rooms[room];
+  if (!roomData) return;
+
+  const id = `${Date.now()}-${Math.random()}`;
+  const elapsed = Date.now() - (roomData.roundStartTime || Date.now());
+  const entry = { id, username, text, time: Date.now(), elapsed };
+
+  roomData.entries.push(entry);
+
+  // 👇 Only notify the submitting player:
+  socket.emit("entry_submitted", { id, text });
+
+  // ✅ Optionally: emit to everyone if you want real-time entries shown:
+  io.to(room).emit("entries", roomData.entries);
+});
+
 
   socket.on("vote_entry", ({ room, username, entryId }) => {
     if (!rooms[room]) return;
