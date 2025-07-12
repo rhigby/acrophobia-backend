@@ -7,7 +7,6 @@
   },
   "dependencies": {
     "cors": "^2.8.5",
-<<<<<<< HEAD
     "dotenv": "^10.0.0",
     "express": "^4.18.2",
     "pg": "^8.16.3",
@@ -18,12 +17,3 @@
   "license": "ISC",
   "description": ""
 }
-=======
-    "express": "^4.18.2",
-    "socket.io": "^4.7.2",
-     "dotenv": "^10.0.0",
-  "pg": "^8.10.0"
-  }
-}
-
->>>>>>> 805551d0ac0da7c2e59ce174e0c17ccf6b8746c2
