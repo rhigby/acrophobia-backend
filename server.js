@@ -21,7 +21,6 @@ const io = new Server(server, {
   }
 });
 
-// PostgreSQL Pool Setup
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false
@@ -94,6 +93,7 @@ function runRound(roomId) {
   room.entries = [];
   room.votes = {};
   room.acronym = createAcronym(room.round + 2);
+  room.roundStartTime = Date.now();
 
   emitToRoom(roomId, "round_number", room.round);
   emitToRoom(roomId, "phase", room.phase);
@@ -143,7 +143,6 @@ function calculateAndEmitResults(roomId) {
 
   let highestVotes = 0;
   let winningEntryId = null;
-  const submitTimes = room.entries.map(e => e.time);
   const firstVoteEntry = room.entries.find(entry => voteCounts[entry.id]);
 
   for (const entry of room.entries) {
@@ -188,7 +187,7 @@ function calculateAndEmitResults(roomId) {
       id: entry.id,
       username: entry.username,
       text: entry.text,
-      time: ((entry.time - submitTimes[0]) / 1000).toFixed(2)
+      time: (entry.elapsed / 1000).toFixed(2)
     }))
   });
   emitToRoom(roomId, "phase", "results");
@@ -197,7 +196,7 @@ function calculateAndEmitResults(roomId) {
     const isWinner = entry.id === winningEntryId;
     const isFastest = firstVoteEntry && entry.id === firstVoteEntry.id;
     const votedForWinner = votersOfWinner.includes(entry.username);
-    saveUserStats(entry.username, room.scores[entry.username], isWinner, isFastest ? (entry.time - submitTimes[0]) : null, votedForWinner);
+    saveUserStats(entry.username, room.scores[entry.username], isWinner, isFastest ? entry.elapsed : null, votedForWinner);
   }
 }
 
@@ -266,7 +265,8 @@ io.on("connection", (socket) => {
   socket.on("submit_entry", ({ room, username, text }) => {
     if (!rooms[room]) return;
     const id = `${Date.now()}-${Math.random()}`;
-    rooms[room].entries.push({ id, username, text, time: Date.now() });
+    const elapsed = Date.now() - rooms[room].roundStartTime;
+    rooms[room].entries.push({ id, username, text, time: Date.now(), elapsed });
     socket.emit("entry_submitted", { id, text });
   });
 
@@ -327,6 +327,7 @@ io.on("connection", (socket) => {
 });
 
 server.listen(3001, () => console.log("✅ Acrophobia backend running on port 3001"));
+
 
 
 
