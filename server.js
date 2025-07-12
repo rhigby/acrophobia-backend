@@ -278,6 +278,35 @@ io.on("connection", (socket) => {
     rooms[room].players = rooms[room].players.filter((p) => p.id !== socket.id);
     emitToRoom(room, "players", rooms[room].players);
   });
+
+  socket.on("login", async ({ username, password }, callback) => {
+  if (!username || !password) {
+    return callback({ success: false, message: "Username and password required" });
+  }
+
+  try {
+    // Upsert user if they don't exist (simple example – no hashing)
+    await pool.query(`
+      INSERT INTO user_stats (username)
+      VALUES ($1)
+      ON CONFLICT DO NOTHING;
+    `, [username]);
+
+    // For now, allow any password – replace with real auth later
+    socket.data.username = username;
+    callback({ success: true });
+
+    // Optionally send stats after login
+    const res = await pool.query(`SELECT * FROM user_stats WHERE username = $1`, [username]);
+    if (res.rows.length) {
+      socket.emit("user_stats", res.rows[0]);
+    }
+  } catch (err) {
+    console.error("Login failed:", err);
+    callback({ success: false, message: "Server error during login" });
+  }
+});
+
 });
 
 server.listen(3001, () => console.log("✅ Acrophobia backend running on port 3001"));
