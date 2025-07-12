@@ -136,6 +136,7 @@ function runRound(roomId) {
   emitToRoom(roomId, "players", room.players);
 
   revealAcronymLetters(roomId, room.acronym, () => {
+    room.roundStartTime = Date.now();
     startCountdown(roomId, 60, () => startVoting(roomId));
   });
 }
