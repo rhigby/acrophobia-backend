@@ -1,8 +1,10 @@
 // backend/server.js
+require("dotenv").config();
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
+const { Pool } = require("pg");
 
 const app = express();
 app.use(cors({
@@ -17,6 +19,12 @@ const io = new Server(server, {
     origin: "https://acrophobia-play.onrender.com",
     methods: ["GET", "POST"]
   }
+});
+
+// PostgreSQL Pool Setup
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false
 });
 
 const rooms = {};
@@ -83,6 +91,24 @@ function startVoting(roomId) {
   startCountdown(roomId, 30, () => showResults(roomId));
 }
 
+async function saveUserStats(username, points, isWinner, isFastest, votedForWinner) {
+  try {
+    await pool.query(
+      `INSERT INTO user_stats (username, games_played, total_points, total_wins, fastest_submission_ms, voted_for_winner_count)
+       VALUES ($1, 1, $2, $3, $4, $5)
+       ON CONFLICT (username) DO UPDATE SET
+         games_played = user_stats.games_played + 1,
+         total_points = user_stats.total_points + EXCLUDED.total_points,
+         total_wins = user_stats.total_wins + EXCLUDED.total_wins,
+         fastest_submission_ms = LEAST(user_stats.fastest_submission_ms, EXCLUDED.fastest_submission_ms),
+         voted_for_winner_count = user_stats.voted_for_winner_count + EXCLUDED.voted_for_winner_count;`,
+      [username, points, isWinner ? 1 : 0, isFastest || 10000, votedForWinner ? 1 : 0]
+    );
+  } catch (err) {
+    console.error("Failed to update user_stats:", err);
+  }
+}
+
 function calculateAndEmitResults(roomId) {
   const room = rooms[roomId];
   if (!room) return;
@@ -140,10 +166,18 @@ function calculateAndEmitResults(roomId) {
       id: entry.id,
       username: entry.username,
       text: entry.text,
-      time: ((entry.time - submitTimes[0]) / 1000).toFixed(2) // seconds since first
+      time: ((entry.time - submitTimes[0]) / 1000).toFixed(2)
     }))
   });
   emitToRoom(roomId, "phase", "results");
+
+  // Store stats
+  for (const entry of room.entries) {
+    const isWinner = entry.id === winningEntryId;
+    const isFastest = firstVoteEntry && entry.id === firstVoteEntry.id;
+    const votedForWinner = votersOfWinner.includes(entry.username);
+    saveUserStats(entry.username, room.scores[entry.username], isWinner, isFastest ? (entry.time - submitTimes[0]) : null, votedForWinner);
+  }
 }
 
 function showResults(roomId) {
@@ -232,6 +266,7 @@ io.on("connection", (socket) => {
 });
 
 server.listen(3001, () => console.log("✅ Acrophobia backend running on port 3001"));
+
 
 
 
