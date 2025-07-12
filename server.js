@@ -7,8 +7,12 @@ const cors = require("cors");
 const { Pool } = require("pg");
 
 const app = express();
+const allowedOrigins = [
+  "https://acrophobia-play.onrender.com",
+  "http://localhost:5173"  // optional for local dev
+];
 app.use(cors({
-  origin: "https://acrophobia-play.onrender.com",
+  origin: allowedOrigins,
   methods: ["GET", "POST"],
   credentials: true
 }));
@@ -16,7 +20,7 @@ app.use(cors({
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "https://acrophobia-play.onrender.com",
+    origin: allowedOrigins,
     methods: ["GET", "POST"]
   }
 });
