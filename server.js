@@ -249,36 +249,36 @@ function showResults(roomId) {
 }
 
 io.on("connection", (socket) => {
-  socket.on("join_room", ({ room, username }) => {
-    if (!rooms[room]) {
-      rooms[room] = {
-        players: [],
-        scores: {},
-        phase: "waiting",
-        round: 0,
-        entries: [],
-        votes: {},
-        acronym: ""
-      };
+
+socket.on("chat_message", ({ room, from, message, to }) => {
+  if (!rooms[room]) return;
+  if (to) {
+    // Private message
+    const recipient = rooms[room].players.find(p => p.username === to);
+    if (recipient) {
+      io.to(recipient.id).emit("chat_message", { from, message, isPrivate: true });
     }
-    const r = rooms[room];
+  } else {
+    // Public message
+    emitToRoom(room, "chat_message", { from, message, isPrivate: false });
+  }
+});
 
-    if (r.players.length >= MAX_PLAYERS) {
-      socket.emit("room_full");
-      return;
+  
+  socket.on("chat_message", ({ room, from, message, to }) => {
+  if (!rooms[room]) return;
+  if (to) {
+    // Private message
+    const recipient = rooms[room].players.find(p => p.username === to);
+    if (recipient) {
+      io.to(recipient.id).emit("chat_message", { from, message, isPrivate: true });
     }
+  } else {
+    // Public message
+    emitToRoom(room, "chat_message", { from, message, isPrivate: false });
+  }
+});
 
-    socket.join(room);
-    socket.data.room = room;
-    socket.data.username = username;
-    r.players.push({ id: socket.id, username });
-
-    emitToRoom(room, "players", r.players);
-
-    if (r.players.length >= 2 && r.phase === "waiting") {
-      startGame(room);
-    }
-  });
 
   socket.on("submit_entry", ({ room, username, text }) => {
     if (!rooms[room]) return;
