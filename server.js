@@ -250,6 +250,39 @@ function showResults(roomId) {
 
 io.on("connection", (socket) => {
 
+  socket.on("join_room", ({ room, username }) => {
+  if (!rooms[room]) {
+    rooms[room] = {
+      players: [],
+      scores: {},
+      phase: "waiting",   // <-- must be set to allow game start
+      round: 0,
+      entries: [],
+      votes: {},
+      acronym: ""
+    };
+  }
+
+  const r = rooms[room];
+
+  if (r.players.length >= MAX_PLAYERS) {
+    socket.emit("room_full");
+    return;
+  }
+
+  socket.join(room);
+  socket.data.room = room;
+  socket.data.username = username;
+  r.players.push({ id: socket.id, username });
+
+  emitToRoom(room, "players", r.players);
+
+  if (r.players.length >= 2 && r.phase === "waiting") {
+    startGame(room);
+  }
+});
+
+
 socket.on("chat_message", ({ room, from, message, to }) => {
   if (!rooms[room]) return;
   if (to) {
