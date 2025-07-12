@@ -73,7 +73,7 @@ function startCountdown(roomId, seconds, onComplete) {
       clearInterval(interval);
       onComplete();
     }
-  }, 2000);
+  }, 1000);
 }
 
 function revealAcronymLetters(roomId, acronym, callback) {
@@ -81,12 +81,13 @@ function revealAcronymLetters(roomId, acronym, callback) {
   const interval = setInterval(() => {
     if (!rooms[roomId]) return clearInterval(interval);
     emitToRoom(roomId, "acronym", acronym.substring(0, index + 1));
+    emitToRoom(roomId, "beep");
     index++;
     if (index >= acronym.length) {
       clearInterval(interval);
       callback();
     }
-  }, 1000);
+  }, 2000);
 }
 
 function startGame(roomId) {
@@ -145,6 +146,9 @@ async function saveUserStats(username, points, isWinner, isFastest, votedForWinn
     console.error("Failed to update user_stats:", err);
   }
 }
+
+// ... rest unchanged
+
 
 function calculateAndEmitResults(roomId) {
   const room = rooms[roomId];
