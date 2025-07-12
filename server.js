@@ -7,12 +7,8 @@ const cors = require("cors");
 const { Pool } = require("pg");
 
 const app = express();
-const allowedOrigins = [
-  "https://acrophobia-play.onrender.com",
-  "http://localhost:5173"  // optional for local dev
-];
 app.use(cors({
-  origin: allowedOrigins,
+  origin: "https://acrophobia-play.onrender.com",
   methods: ["GET", "POST"],
   credentials: true
 }));
@@ -21,9 +17,7 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: "https://acrophobia-play.onrender.com",
-    methods: ["GET", "POST"],
-    credentials: true,
-    allowedHeaders: ["Content-Type"]
+    methods: ["GET", "POST"]
   }
 });
 
@@ -204,31 +198,32 @@ function calculateAndEmitResults(roomId) {
 function showResults(roomId) {
   calculateAndEmitResults(roomId);
 
-  startCountdown(roomId, 10, () => {
-    emitToRoom(roomId, "phase", "intermission");
-    startCountdown(roomId, 30, () => {
-      const room = rooms[roomId];
-      if (!room) return;
-      if (room.round < MAX_ROUNDS) {
-        room.round++;
-        runRound(roomId);
-      } else {
-        emitToRoom(roomId, "phase", "game_over");
-        setTimeout(() => {
-          room.phase = "waiting";
-          room.round = 0;
-          room.entries = [];
-          room.votes = {};
-          room.acronym = "";
-          room.scores = {};
-          emitToRoom(roomId, "phase", "waiting");
-          emitToRoom(roomId, "players", room.players);
-          if (room.players.length >= 2) {
-            startGame(roomId);
-          }
-        }, 30000);
-      }
-    });
+  // Show results for 30 seconds
+  startCountdown(roomId, 30, () => {
+    // Show next round overlay for 10 seconds
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.round < MAX_ROUNDS) {
+      room.round++;
+      emitToRoom(roomId, "phase", "next_round_overlay");
+      emitToRoom(roomId, "round_number", room.round);
+      setTimeout(() => runRound(roomId), 10000);
+    } else {
+      emitToRoom(roomId, "phase", "game_over");
+      setTimeout(() => {
+        room.phase = "waiting";
+        room.round = 0;
+        room.entries = [];
+        room.votes = {};
+        room.acronym = "";
+        room.scores = {};
+        emitToRoom(roomId, "phase", "waiting");
+        emitToRoom(roomId, "players", room.players);
+        if (room.players.length >= 2) {
+          startGame(roomId);
+        }
+      }, 30000);
+    }
   });
 }
 
@@ -286,36 +281,33 @@ io.on("connection", (socket) => {
   });
 
   socket.on("login", async ({ username, password }, callback) => {
-  if (!username || !password) {
-    return callback({ success: false, message: "Username and password required" });
-  }
-
-  try {
-    // Upsert user if they don't exist (simple example – no hashing)
-    await pool.query(`
-      INSERT INTO user_stats (username)
-      VALUES ($1)
-      ON CONFLICT DO NOTHING;
-    `, [username]);
-
-    // For now, allow any password – replace with real auth later
-    socket.data.username = username;
-    callback({ success: true });
-
-    // Optionally send stats after login
-    const res = await pool.query(`SELECT * FROM user_stats WHERE username = $1`, [username]);
-    if (res.rows.length) {
-      socket.emit("user_stats", res.rows[0]);
+    if (!username || !password) {
+      return callback({ success: false, message: "Username and password required" });
     }
-  } catch (err) {
-    console.error("Login failed:", err);
-    callback({ success: false, message: "Server error during login" });
-  }
-});
 
+    try {
+      await pool.query(`
+        INSERT INTO user_stats (username)
+        VALUES ($1)
+        ON CONFLICT DO NOTHING;
+      `, [username]);
+
+      socket.data.username = username;
+      callback({ success: true });
+
+      const res = await pool.query(`SELECT * FROM user_stats WHERE username = $1`, [username]);
+      if (res.rows.length) {
+        socket.emit("user_stats", res.rows[0]);
+      }
+    } catch (err) {
+      console.error("Login failed:", err);
+      callback({ success: false, message: "Server error during login" });
+    }
+  });
 });
 
 server.listen(3001, () => console.log("✅ Acrophobia backend running on port 3001"));
+
 
 
 
