@@ -7,19 +7,36 @@ const cors = require("cors");
 const { Pool } = require("pg");
 
 const app = express();
+const allowedOrigins = [
+  "https://acrophobia-play.onrender.com",
+  "http://localhost:3000"
+];
+
 app.use(cors({
-  origin: "https://acrophobia-play.onrender.com",
-  methods: ["GET", "POST"],
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
   credentials: true
 }));
 
-const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "https://acrophobia-play.onrender.com",
-    methods: ["GET", "POST"]
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by Socket.IO CORS"));
+      }
+    },
+    methods: ["GET", "POST"],
+    credentials: true
   }
 });
+
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
