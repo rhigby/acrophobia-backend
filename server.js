@@ -27,6 +27,21 @@ const pool = new Pool({
   ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false
 });
 
+async function initDb() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_stats (
+      username TEXT PRIMARY KEY,
+      total_points INTEGER DEFAULT 0,
+      total_wins INTEGER DEFAULT 0,
+      games_played INTEGER DEFAULT 0,
+      voted_for_winner_count INTEGER DEFAULT 0,
+      fastest_submission_ms INTEGER
+    );
+  `);
+}
+
+initDb().catch(console.error);
+
 const rooms = {};
 const MAX_PLAYERS = 10;
 const MAX_ROUNDS = 5;
@@ -266,6 +281,7 @@ io.on("connection", (socket) => {
 });
 
 server.listen(3001, () => console.log("✅ Acrophobia backend running on port 3001"));
+
 
 
 
