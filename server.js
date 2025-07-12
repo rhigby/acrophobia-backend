@@ -76,6 +76,19 @@ function startCountdown(roomId, seconds, onComplete) {
   }, 1000);
 }
 
+function revealAcronymLetters(roomId, acronym, callback) {
+  let index = 0;
+  const interval = setInterval(() => {
+    if (!rooms[roomId]) return clearInterval(interval);
+    emitToRoom(roomId, "acronym", acronym.substring(0, index + 1));
+    index++;
+    if (index >= acronym.length) {
+      clearInterval(interval);
+      callback();
+    }
+  }, 2000);
+}
+
 function startGame(roomId) {
   const room = rooms[roomId];
   if (!room || room.players.length < 2) return;
@@ -97,10 +110,11 @@ function runRound(roomId) {
 
   emitToRoom(roomId, "round_number", room.round);
   emitToRoom(roomId, "phase", room.phase);
-  emitToRoom(roomId, "acronym", room.acronym);
   emitToRoom(roomId, "players", room.players);
 
-  startCountdown(roomId, 60, () => startVoting(roomId));
+  revealAcronymLetters(roomId, room.acronym, () => {
+    startCountdown(roomId, 60, () => startVoting(roomId));
+  });
 }
 
 function startVoting(roomId) {
