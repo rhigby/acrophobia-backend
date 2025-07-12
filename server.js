@@ -73,7 +73,7 @@ function startCountdown(roomId, seconds, onComplete) {
       clearInterval(interval);
       onComplete();
     }
-  }, 1000);
+  }, 2000);
 }
 
 function revealAcronymLetters(roomId, acronym, callback) {
@@ -86,7 +86,7 @@ function revealAcronymLetters(roomId, acronym, callback) {
       clearInterval(interval);
       callback();
     }
-  }, 2000);
+  }, 1000);
 }
 
 function startGame(roomId) {
