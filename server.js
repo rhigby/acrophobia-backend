@@ -29,8 +29,16 @@ const pool = new Pool({
 
 async function initDb() {
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS user_stats (
+    CREATE TABLE IF NOT EXISTS users (
       username TEXT PRIMARY KEY,
+      email TEXT UNIQUE NOT NULL,
+      password TEXT NOT NULL
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_stats (
+      username TEXT PRIMARY KEY REFERENCES users(username),
       total_points INTEGER DEFAULT 0,
       total_wins INTEGER DEFAULT 0,
       games_played INTEGER DEFAULT 0,
@@ -135,7 +143,6 @@ function calculateAndEmitResults(roomId) {
 
   let highestVotes = 0;
   let winningEntryId = null;
-  const entryFirstVotes = new Set();
   const submitTimes = room.entries.map(e => e.time);
   const firstVoteEntry = room.entries.find(entry => voteCounts[entry.id]);
 
@@ -186,7 +193,6 @@ function calculateAndEmitResults(roomId) {
   });
   emitToRoom(roomId, "phase", "results");
 
-  // Store stats
   for (const entry of room.entries) {
     const isWinner = entry.id === winningEntryId;
     const isFastest = firstVoteEntry && entry.id === firstVoteEntry.id;
@@ -198,9 +204,7 @@ function calculateAndEmitResults(roomId) {
 function showResults(roomId) {
   calculateAndEmitResults(roomId);
 
-  // Show results for 30 seconds
   startCountdown(roomId, 30, () => {
-    // Show next round overlay for 10 seconds
     const room = rooms[roomId];
     if (!room) return;
     if (room.round < MAX_ROUNDS) {
@@ -252,7 +256,6 @@ io.on("connection", (socket) => {
     socket.data.username = username;
     r.players.push({ id: socket.id, username });
 
-    console.log(`[JOIN] ${username} joined ${room}`);
     emitToRoom(room, "players", r.players);
 
     if (r.players.length >= 2 && r.phase === "waiting") {
@@ -280,24 +283,41 @@ io.on("connection", (socket) => {
     emitToRoom(room, "players", rooms[room].players);
   });
 
+  socket.on("register", async ({ username, email, password }, callback) => {
+    try {
+      const userCheck = await pool.query(`SELECT * FROM users WHERE username = $1 OR email = $2`, [username, email]);
+      if (userCheck.rows.length > 0) {
+        return callback({ success: false, message: "Username or email already exists" });
+      }
+
+      await pool.query(`INSERT INTO users (username, email, password) VALUES ($1, $2, $3)`, [username, email, password]);
+      await pool.query(`INSERT INTO user_stats (username) VALUES ($1)`, [username]);
+
+      socket.data.username = username;
+      callback({ success: true });
+    } catch (err) {
+      console.error("Registration error:", err);
+      callback({ success: false, message: "Server error during registration" });
+    }
+  });
+
   socket.on("login", async ({ username, password }, callback) => {
     if (!username || !password) {
       return callback({ success: false, message: "Username and password required" });
     }
 
     try {
-      await pool.query(`
-        INSERT INTO user_stats (username)
-        VALUES ($1)
-        ON CONFLICT DO NOTHING;
-      `, [username]);
+      const res = await pool.query(`SELECT * FROM users WHERE username = $1 AND password = $2`, [username, password]);
+      if (res.rows.length === 0) {
+        return callback({ success: false, message: "Invalid credentials" });
+      }
 
       socket.data.username = username;
       callback({ success: true });
 
-      const res = await pool.query(`SELECT * FROM user_stats WHERE username = $1`, [username]);
-      if (res.rows.length) {
-        socket.emit("user_stats", res.rows[0]);
+      const stats = await pool.query(`SELECT * FROM user_stats WHERE username = $1`, [username]);
+      if (stats.rows.length) {
+        socket.emit("user_stats", stats.rows[0]);
       }
     } catch (err) {
       console.error("Login failed:", err);
@@ -307,6 +327,7 @@ io.on("connection", (socket) => {
 });
 
 server.listen(3001, () => console.log("✅ Acrophobia backend running on port 3001"));
+
 
 
 
