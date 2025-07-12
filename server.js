@@ -7,6 +7,7 @@ const cors = require("cors");
 const { Pool } = require("pg");
 
 const app = express();
+
 const allowedOrigins = [
   "https://acrophobia-play.onrender.com",
   "http://localhost:3000"
@@ -23,6 +24,9 @@ app.use(cors({
   credentials: true
 }));
 
+// ✅ Create the HTTP server BEFORE passing it to Socket.IO
+const server = http.createServer(app);
+
 const io = new Server(server, {
   cors: {
     origin: function (origin, callback) {
@@ -36,6 +40,7 @@ const io = new Server(server, {
     credentials: true
   }
 });
+
 
 
 const pool = new Pool({
