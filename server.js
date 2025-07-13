@@ -24,9 +24,7 @@ const allowedOrigins = [
   "https://acrophobia-play.onrender.com",
   "http://localhost:3000"
 ];
-io.use((socket, next) => {
-  sessionMiddleware(socket.request, {}, next);
-});
+
 app.use(cookieParser());
 app.use(sessionMiddleware);
 
@@ -57,7 +55,14 @@ const io = new Server(server, {
     credentials: true
   }
 });
-
+io.use((socket, next) => {
+  const session = socket.request.session;
+  if (session && session.username) {
+    next();
+  } else {
+    next(new Error("Unauthorized"));
+  }
+});
 io.use((socket, next) => {
   sessionMiddleware(socket.request, {}, next);
 });
