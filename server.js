@@ -300,6 +300,17 @@ io.on("connection", (socket) => {
   } else {
     callback({ authenticated: false });
   }
+  socket.on("login_cookie", ({ username }, callback) => {
+  if (!username) return callback({ success: false });
+
+  // Rehydrate the session manually
+  const session = socket.request.session;
+  session.username = username;
+  session.save();
+
+  callback({ success: true, username });
+});
+
 });
 
 
