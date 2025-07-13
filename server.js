@@ -166,7 +166,17 @@ function startVoting(roomId) {
 
   room.phase = "vote";
   emitToRoom(roomId, "phase", "vote");
-  emitToRoom(roomId, "entries", room.entries);
+  onst roomSockets = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
+
+for (const socketId of roomSockets) {
+  const playerSocket = io.sockets.sockets.get(socketId);
+  if (!playerSocket) continue;
+
+  // Shuffle the entries uniquely for each socket
+  const shuffledEntries = [...room.entries].sort(() => Math.random() - 0.5);
+
+  playerSocket.emit("entries", shuffledEntries);
+}
 
   startCountdown(roomId, 30, () => showResults(roomId));
 }
@@ -437,7 +447,7 @@ socket.on("chat_message", ({ room, username, text }) => {
   const id = `${Date.now()}-${Math.random()}`;
   const elapsed = Date.now() - (roomData.roundStartTime);
   const entry = { id, username, text, time: Date.now(), elapsed };
-
+  if (!roomData.entries.find(e => e.id === entryId)) return;
   roomData.entries.push(entry);
 
   // ✅ Broadcast full list of submitted usernames
