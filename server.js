@@ -3,15 +3,7 @@ require("dotenv").config();
 const session = require("express-session");
 const cookieParser = require("cookie-parser");
 
-const sessionMiddleware = session({
-  secret: process.env.SESSION_SECRET || "supersecret",
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: process.env.NODE_ENV === "production", // make sure you're using HTTPS in production
-    maxAge: 86400000 // 1 day
-  }
-});
+
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
