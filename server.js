@@ -331,7 +331,7 @@ io.on("connection", (socket) => {
     rooms[room] = {
       players: [],
       scores: {},
-      phase: "waiting",   // <-- must be set to allow game start
+      phase: "waiting",
       round: 0,
       entries: [],
       votes: {},
@@ -341,6 +341,12 @@ io.on("connection", (socket) => {
 
   const r = rooms[room];
 
+  // Check if user is already in room
+  if (r.players.find(p => p.username === username)) {
+    socket.emit("room_full"); // reuse this error if needed
+    return;
+  }
+
   if (r.players.length >= MAX_PLAYERS) {
     socket.emit("room_full");
     return;
@@ -349,28 +355,17 @@ io.on("connection", (socket) => {
   socket.join(room);
   socket.data.room = room;
   socket.data.username = username;
+
   r.players.push({ id: socket.id, username });
 
   emitToRoom(room, "players", r.players);
 
+  // Start game if at least 2 players and still waiting
   if (r.players.length >= 2 && r.phase === "waiting") {
     startGame(room);
   }
 });
 
-  socket.on("chat_message", ({ room, from, message, to }) => {
-  if (!rooms[room]) return;
-  if (to) {
-    // Private message
-    const recipient = rooms[room].players.find(p => p.username === to);
-    if (recipient) {
-      io.to(recipient.id).emit("chat_message", { from, message, isPrivate: true });
-    }
-  } else {
-    // Public message
-    emitToRoom(room, "chat_message", { from, message, isPrivate: false });
-  }
-});
 
 
  socket.on("submit_entry", ({ room, username, text }) => {
