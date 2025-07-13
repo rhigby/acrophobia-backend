@@ -444,21 +444,25 @@ socket.on("chat_message", ({ room, username, text }) => {
   const roomData = rooms[room];
   if (!roomData) return;
 
+  // ✅ Prevent duplicate submission from same user
+  if (roomData.entries.find(e => e.username === username)) return;
+
   const id = `${Date.now()}-${Math.random()}`;
-  const elapsed = Date.now() - (roomData.roundStartTime);
+  const elapsed = Date.now() - roomData.roundStartTime;
   const entry = { id, username, text, time: Date.now(), elapsed };
-  if (!roomData.entries.find(e => e.id === entryId)) return;
+
   roomData.entries.push(entry);
 
-  // ✅ Broadcast full list of submitted usernames
+  // ✅ Broadcast updated list of who has submitted
   const submittedUsernames = roomData.entries.map(e => e.username);
   emitToRoom(room, "submitted_users", submittedUsernames);
 
   socket.emit("entry_submitted", { id, text });
 
-  // ✅ Optionally: emit to everyone if you want real-time entries shown:
+  // ✅ Emit updated entries to all (optional — frontend may not need this)
   io.to(room).emit("entries", roomData.entries);
 });
+
 
 
   socket.on("vote_entry", ({ room, username, entryId }) => {
