@@ -420,7 +420,10 @@ io.on("connection", (socket) => {
 
   roomData.entries.push(entry);
 
-  // 👇 Only notify the submitting player:
+  // ✅ Broadcast full list of submitted usernames
+  const submittedUsernames = roomData.entries.map(e => e.username);
+  emitToRoom(room, "submitted_users", submittedUsernames);
+
   socket.emit("entry_submitted", { id, text });
 
   // ✅ Optionally: emit to everyone if you want real-time entries shown:
