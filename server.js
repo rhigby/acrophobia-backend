@@ -3,7 +3,6 @@ require("dotenv").config();
 const session = require("express-session");
 const cookieParser = require("cookie-parser");
 
-
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -451,9 +450,11 @@ io.on("connection", (socket) => {
 
 
   socket.on("vote_entry", ({ room, username, entryId }) => {
+    
     if (!rooms[room]) return;
     rooms[room].votes[username] = entryId;
     socket.emit("vote_confirmed", entryId);
+    io.to(room).emit("voted_users", Object.keys(roomData.votes));
   });
 
   socket.on("disconnect", () => {
