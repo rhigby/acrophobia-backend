@@ -166,7 +166,7 @@ function startVoting(roomId) {
 
   room.phase = "vote";
   emitToRoom(roomId, "phase", "vote");
-  onst roomSockets = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
+  const roomSockets = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
 
 for (const socketId of roomSockets) {
   const playerSocket = io.sockets.sockets.get(socketId);
