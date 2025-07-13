@@ -455,7 +455,7 @@ socket.on("login_cookie", ({ username }, callback) => {
 
   roomData.votes[username] = entryId;
   socket.emit("vote_confirmed", entryId);
-  io.to(room).emit("voted_users", Object.keys(roomData.votes));
+  io.to(room).emit("votes", roomData.votes);
 });
 
   socket.on("disconnect", () => {
