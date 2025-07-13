@@ -378,7 +378,9 @@ socket.on("login_cookie", ({ username }, callback) => {
     }
   });
 
-
+socket.on("chat_message", ({ room, username, text }) => {
+  io.to(room).emit("chat_message", { username, text });
+});
   socket.on("join_room", ({ room }, callback) => {
   const session = socket.request.session;
   const username = session?.username;
