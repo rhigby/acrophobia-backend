@@ -293,7 +293,15 @@ function showResults(roomId) {
 
 io.on("connection", (socket) => {
 
-  
+  socket.on("check_session", (callback) => {
+  const session = socket.request.session;
+  if (session && session.username) {
+    callback({ authenticated: true, username: session.username });
+  } else {
+    callback({ authenticated: false });
+  }
+});
+
 
  console.log("User connected:", socket.id);
 
