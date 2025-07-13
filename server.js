@@ -1,5 +1,17 @@
 // backend/server.js
 require("dotenv").config();
+const session = require("express-session");
+const cookieParser = require("cookie-parser");
+
+const sessionMiddleware = session({
+  secret: process.env.SESSION_SECRET || "supersecret",
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === "production", // make sure you're using HTTPS in production
+    maxAge: 86400000 // 1 day
+  }
+});
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -7,21 +19,49 @@ const cors = require("cors");
 const { Pool } = require("pg");
 
 const app = express();
+
+const allowedOrigins = [
+  "https://acrophobia-play.onrender.com",
+  "http://localhost:3000"
+];
+io.use((socket, next) => {
+  sessionMiddleware(socket.request, {}, next);
+});
+app.use(cookieParser());
+app.use(sessionMiddleware);
+
 app.use(cors({
-  origin: "https://acrophobia-play.onrender.com",
-  methods: ["GET", "POST"],
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
   credentials: true
 }));
 
+// ✅ Create the HTTP server BEFORE passing it to Socket.IO
 const server = http.createServer(app);
+
 const io = new Server(server, {
   cors: {
-    origin: "https://acrophobia-play.onrender.com",
-    methods: ["GET", "POST"]
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by Socket.IO CORS"));
+      }
+    },
+    methods: ["GET", "POST"],
+    credentials: true
   }
 });
 
-// PostgreSQL Pool Setup
+io.use((socket, next) => {
+  sessionMiddleware(socket.request, {}, next);
+});
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false
@@ -29,8 +69,16 @@ const pool = new Pool({
 
 async function initDb() {
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS user_stats (
+    CREATE TABLE IF NOT EXISTS users (
       username TEXT PRIMARY KEY,
+      email TEXT UNIQUE NOT NULL,
+      password TEXT NOT NULL
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_stats (
+      username TEXT PRIMARY KEY REFERENCES users(username),
       total_points INTEGER DEFAULT 0,
       total_wins INTEGER DEFAULT 0,
       games_played INTEGER DEFAULT 0,
@@ -69,6 +117,20 @@ function startCountdown(roomId, seconds, onComplete) {
   }, 1000);
 }
 
+function revealAcronymLetters(roomId, acronym, callback) {
+  let index = 0;
+  const interval = setInterval(() => {
+    if (!rooms[roomId]) return clearInterval(interval);
+    emitToRoom(roomId, "acronym", acronym.substring(0, index + 1));
+    emitToRoom(roomId, "beep");
+    index++;
+    if (index >= acronym.length) {
+      clearInterval(interval);
+      callback();
+    }
+  }, 2000);
+}
+
 function startGame(roomId) {
   const room = rooms[roomId];
   if (!room || room.players.length < 2) return;
@@ -86,13 +148,16 @@ function runRound(roomId) {
   room.entries = [];
   room.votes = {};
   room.acronym = createAcronym(room.round + 2);
+  room.roundStartTime = Date.now();
 
   emitToRoom(roomId, "round_number", room.round);
   emitToRoom(roomId, "phase", room.phase);
-  emitToRoom(roomId, "acronym", room.acronym);
   emitToRoom(roomId, "players", room.players);
 
-  startCountdown(roomId, 60, () => startVoting(roomId));
+  revealAcronymLetters(roomId, room.acronym, () => {
+    room.roundStartTime = Date.now();
+    startCountdown(roomId, 60, () => startVoting(roomId));
+  });
 }
 
 function startVoting(roomId) {
@@ -124,6 +189,9 @@ async function saveUserStats(username, points, isWinner, isFastest, votedForWinn
   }
 }
 
+// ... rest unchanged
+
+
 function calculateAndEmitResults(roomId) {
   const room = rooms[roomId];
   if (!room) return;
@@ -135,8 +203,6 @@ function calculateAndEmitResults(roomId) {
 
   let highestVotes = 0;
   let winningEntryId = null;
-  const entryFirstVotes = new Set();
-  const submitTimes = room.entries.map(e => e.time);
   const firstVoteEntry = room.entries.find(entry => voteCounts[entry.id]);
 
   for (const entry of room.entries) {
@@ -177,94 +243,148 @@ function calculateAndEmitResults(roomId) {
     voters: votersOfWinner
   });
   emitToRoom(roomId, "results_metadata", {
-    timestamps: room.entries.map(entry => ({
-      id: entry.id,
-      username: entry.username,
-      text: entry.text,
-      time: ((entry.time - submitTimes[0]) / 1000).toFixed(2)
-    }))
-  });
+  timestamps: room.entries.map(entry => ({
+    id: entry.id,
+    username: entry.username,
+    text: entry.text,
+    time: (entry.elapsed / 1000).toFixed(2)  // ✅ seconds with decimals
+  }))
+});
   emitToRoom(roomId, "phase", "results");
 
-  // Store stats
   for (const entry of room.entries) {
     const isWinner = entry.id === winningEntryId;
     const isFastest = firstVoteEntry && entry.id === firstVoteEntry.id;
     const votedForWinner = votersOfWinner.includes(entry.username);
-    saveUserStats(entry.username, room.scores[entry.username], isWinner, isFastest ? (entry.time - submitTimes[0]) : null, votedForWinner);
+    saveUserStats(entry.username, room.scores[entry.username], isWinner, isFastest ? entry.elapsed : null, votedForWinner);
   }
 }
 
 function showResults(roomId) {
   calculateAndEmitResults(roomId);
 
-  startCountdown(roomId, 10, () => {
-    emitToRoom(roomId, "phase", "intermission");
-    startCountdown(roomId, 30, () => {
-      const room = rooms[roomId];
-      if (!room) return;
-      if (room.round < MAX_ROUNDS) {
-        room.round++;
-        runRound(roomId);
-      } else {
-        emitToRoom(roomId, "phase", "game_over");
-        setTimeout(() => {
-          room.phase = "waiting";
-          room.round = 0;
-          room.entries = [];
-          room.votes = {};
-          room.acronym = "";
-          room.scores = {};
-          emitToRoom(roomId, "phase", "waiting");
-          emitToRoom(roomId, "players", room.players);
-          if (room.players.length >= 2) {
-            startGame(roomId);
-          }
-        }, 30000);
-      }
-    });
+  startCountdown(roomId, 30, () => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.round < MAX_ROUNDS) {
+      room.round++;
+      emitToRoom(roomId, "phase", "next_round_overlay");
+      emitToRoom(roomId, "round_number", room.round);
+      setTimeout(() => runRound(roomId), 10000);
+    } else {
+      emitToRoom(roomId, "phase", "game_over");
+      setTimeout(() => {
+        room.phase = "waiting";
+        room.round = 0;
+        room.entries = [];
+        room.votes = {};
+        room.acronym = "";
+        room.scores = {};
+        emitToRoom(roomId, "phase", "waiting");
+        emitToRoom(roomId, "players", room.players);
+        if (room.players.length >= 2) {
+          startGame(roomId);
+        }
+      }, 30000);
+    }
   });
 }
 
 io.on("connection", (socket) => {
+
+  socket.on("login", async ({ username, password }, callback) => {
+  if (!username || !password) {
+    return callback({ success: false, message: "Username and password required" });
+  }
+
+  try {
+    const res = await pool.query(
+      `SELECT * FROM users WHERE username = $1 AND password = $2`,
+      [username, password]
+    );
+
+    if (res.rows.length === 0) {
+      return callback({ success: false, message: "Invalid credentials" });
+    }
+
+    // ✅ Set the username in the session
+    socket.request.session.username = username;
+    socket.request.session.save();
+
+    callback({ success: true });
+
+    // Optionally send stats back
+    const stats = await pool.query(`SELECT * FROM user_stats WHERE username = $1`, [username]);
+    if (stats.rows.length) {
+      socket.emit("user_stats", stats.rows[0]);
+    }
+
+  } catch (err) {
+    console.error("Login failed:", err);
+    callback({ success: false, message: "Server error during login" });
+  }
+});
+
+
   socket.on("join_room", ({ room, username }) => {
-    if (!rooms[room]) {
-      rooms[room] = {
-        players: [],
-        scores: {},
-        phase: "waiting",
-        round: 0,
-        entries: [],
-        votes: {},
-        acronym: ""
-      };
-    }
-    const r = rooms[room];
+  if (!rooms[room]) {
+    rooms[room] = {
+      players: [],
+      scores: {},
+      phase: "waiting",
+      round: 0,
+      entries: [],
+      votes: {},
+      acronym: ""
+    };
+  }
 
-    if (r.players.length >= MAX_PLAYERS) {
-      socket.emit("room_full");
-      return;
-    }
+  const r = rooms[room];
 
-    socket.join(room);
-    socket.data.room = room;
-    socket.data.username = username;
-    r.players.push({ id: socket.id, username });
+  // Check if user is already in room
+  if (r.players.find(p => p.username === username)) {
+    socket.emit("room_full"); // reuse this error if needed
+    return;
+  }
 
-    console.log(`[JOIN] ${username} joined ${room}`);
-    emitToRoom(room, "players", r.players);
+  if (r.players.length >= MAX_PLAYERS) {
+    socket.emit("room_full");
+    return;
+  }
 
-    if (r.players.length >= 2 && r.phase === "waiting") {
-      startGame(room);
-    }
-  });
+  socket.join(room);
+  socket.data.room = room;
+  socket.data.username = username;
 
-  socket.on("submit_entry", ({ room, username, text }) => {
-    if (!rooms[room]) return;
-    const id = `${Date.now()}-${Math.random()}`;
-    rooms[room].entries.push({ id, username, text, time: Date.now() });
-    socket.emit("entry_submitted", { id, text });
-  });
+  r.players.push({ id: socket.id, username });
+
+  emitToRoom(room, "players", r.players);
+
+  // Start game if at least 2 players and still waiting
+  if (r.players.length >= 2 && r.phase === "waiting") {
+    startGame(room);
+  }
+});
+
+
+
+ socket.on("submit_entry", ({ room, username, text }) => {
+  const roomData = rooms[room];
+  if (!roomData) return;
+
+  const id = `${Date.now()}-${Math.random()}`;
+  const elapsed = Date.now() - (roomData.roundStartTime);
+  const entry = { id, username, text, time: Date.now(), elapsed };
+
+  roomData.entries.push(entry);
+
+  // 👇 Only notify the submitting player:
+  socket.emit("entry_submitted", { id, text });
+
+  // ✅ Optionally: emit to everyone if you want real-time entries shown:
+  io.to(room).emit("entries", roomData.entries);
+});
+
 
   socket.on("vote_entry", ({ room, username, entryId }) => {
     if (!rooms[room]) return;
@@ -278,9 +398,55 @@ io.on("connection", (socket) => {
     rooms[room].players = rooms[room].players.filter((p) => p.id !== socket.id);
     emitToRoom(room, "players", rooms[room].players);
   });
+
+  socket.on("register", async ({ username, email, password }, callback) => {
+    try {
+      const userCheck = await pool.query(`SELECT * FROM users WHERE username = $1 OR email = $2`, [username, email]);
+      if (userCheck.rows.length > 0) {
+        return callback({ success: false, message: "Username or email already exists" });
+      }
+
+      await pool.query(`INSERT INTO users (username, email, password) VALUES ($1, $2, $3)`, [username, email, password]);
+      await pool.query(`INSERT INTO user_stats (username) VALUES ($1)`, [username]);
+
+      socket.data.username = username;
+      callback({ success: true });
+    } catch (err) {
+      console.error("Registration error:", err);
+      callback({ success: false, message: "Server error during registration" });
+    }
+  });
+
+  socket.on("login", async ({ username, password }, callback) => {
+    if (!username || !password) {
+      return callback({ success: false, message: "Username and password required" });
+    }
+
+    try {
+      const res = await pool.query(`SELECT * FROM users WHERE username = $1 AND password = $2`, [username, password]);
+      if (res.rows.length === 0) {
+        return callback({ success: false, message: "Invalid credentials" });
+      }
+
+      socket.data.username = username;
+      callback({ success: true });
+
+      const stats = await pool.query(`SELECT * FROM user_stats WHERE username = $1`, [username]);
+      if (stats.rows.length) {
+        socket.emit("user_stats", stats.rows[0]);
+      }
+    } catch (err) {
+      console.error("Login failed:", err);
+      callback({ success: false, message: "Server error during login" });
+    }
+  });
 });
 
 server.listen(3001, () => console.log("✅ Acrophobia backend running on port 3001"));
+
+
+
+
 
 
 
