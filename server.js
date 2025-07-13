@@ -17,7 +17,15 @@ const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
 const { Pool } = require("pg");
-
+const sessionMiddleware = session({
+  secret: "secret-key",
+  resave: false,
+  saveUninitialized: true,
+  cookie: {
+    sameSite: "none", // important for cross-origin
+    secure: true
+  }
+});
 const app = express();
 
 const allowedOrigins = [
@@ -55,6 +63,7 @@ const io = new Server(server, {
     credentials: true
   }
 });
+io.engine.use(sessionMiddleware); 
 // 1. First attach the session middleware
 io.use((socket, next) => {
   sessionMiddleware(socket.request, {}, next);
