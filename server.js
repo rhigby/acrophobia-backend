@@ -299,18 +299,18 @@ io.on("connection", (socket) => {
   } else {
     callback({ authenticated: false });
   }
-  socket.on("login_cookie", ({ username }, callback) => {
+});
+
+// ✅ Move this OUTSIDE of check_session
+socket.on("login_cookie", ({ username }, callback) => {
   if (!username) return callback({ success: false });
 
-  // Rehydrate the session manually
   const session = socket.request.session;
   session.username = username;
   session.save();
-
   callback({ success: true, username });
 });
 
-});
 
 
  console.log("User connected:", socket.id);
@@ -465,47 +465,7 @@ io.on("connection", (socket) => {
     emitToRoom(room, "players", rooms[room].players);
   });
 
-  socket.on("register", async ({ username, email, password }, callback) => {
-    try {
-      const userCheck = await pool.query(`SELECT * FROM users WHERE username = $1 OR email = $2`, [username, email]);
-      if (userCheck.rows.length > 0) {
-        return callback({ success: false, message: "Username or email already exists" });
-      }
-
-      await pool.query(`INSERT INTO users (username, email, password) VALUES ($1, $2, $3)`, [username, email, password]);
-      await pool.query(`INSERT INTO user_stats (username) VALUES ($1)`, [username]);
-
-      socket.data.username = username;
-      callback({ success: true });
-    } catch (err) {
-      console.error("Registration error:", err);
-      callback({ success: false, message: "Server error during registration" });
-    }
-  });
-
-  socket.on("login", async ({ username, password }, callback) => {
-    if (!username || !password) {
-      return callback({ success: false, message: "Username and password required" });
-    }
-
-    try {
-      const res = await pool.query(`SELECT * FROM users WHERE username = $1 AND password = $2`, [username, password]);
-      if (res.rows.length === 0) {
-        return callback({ success: false, message: "Invalid credentials" });
-      }
-
-      socket.data.username = username;
-      callback({ success: true });
-
-      const stats = await pool.query(`SELECT * FROM user_stats WHERE username = $1`, [username]);
-      if (stats.rows.length) {
-        socket.emit("user_stats", stats.rows[0]);
-      }
-    } catch (err) {
-      console.error("Login failed:", err);
-      callback({ success: false, message: "Server error during login" });
-    }
-  });
+  
 });
 
 server.listen(3001, () => console.log("✅ Acrophobia backend running on port 3001"));
