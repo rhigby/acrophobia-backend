@@ -224,13 +224,13 @@ function calculateAndEmitResults(roomId) {
     voters: votersOfWinner
   });
   emitToRoom(roomId, "results_metadata", {
-    timestamps: room.entries.map(entry => ({
-      id: entry.id,
-      username: entry.username,
-      text: entry.text,
-      time: (entry.elapsed / 1000).toFixed(2)
-    }))
-  });
+  timestamps: room.entries.map(entry => ({
+    id: entry.id,
+    username: entry.username,
+    text: entry.text,
+    time: (entry.elapsed / 1000).toFixed(2)  // ✅ seconds with decimals
+  }))
+});
   emitToRoom(roomId, "phase", "results");
 
   for (const entry of room.entries) {
