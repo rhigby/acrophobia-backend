@@ -119,16 +119,23 @@ function revealAcronymLetters(roomId, acronym, callback) {
   let index = 0;
   const interval = setInterval(() => {
     if (!rooms[roomId]) return clearInterval(interval);
+
+    // ✅ Emit the current portion of the acronym
     emitToRoom(roomId, "acronym", acronym.substring(0, index + 1));
+
+    // ✅ Emit the letter sound (replaces original "beep")
     emitToRoom(roomId, "letter_beep");
+
     index++;
+
     if (index >= acronym.length) {
       clearInterval(interval);
-      emitToRoom(roomId, "acronym_ready"); // ✅ tell clients it's done
+      emitToRoom(roomId, "acronym_ready"); // Done revealing
       callback();
     }
-  }, 1000);
+  }, 2000);
 }
+
 
 
 function startGame(roomId) {
