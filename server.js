@@ -300,38 +300,72 @@ function showResults(roomId) {
 
 io.on("connection", (socket) => {
 
+  
+
+ console.log("User connected:", socket.id);
+
+  // Login event
   socket.on("login", async ({ username, password }, callback) => {
-  if (!username || !password) {
-    return callback({ success: false, message: "Username and password required" });
-  }
-
-  try {
-    const res = await pool.query(
-      `SELECT * FROM users WHERE username = $1 AND password = $2`,
-      [username, password]
-    );
-
-    if (res.rows.length === 0) {
-      return callback({ success: false, message: "Invalid credentials" });
+    console.log("Login received:", username);
+    if (!username || !password) {
+      return callback({ success: false, message: "Missing credentials" });
     }
 
-    // ✅ Set the username in the session
-    socket.request.session.username = username;
-    socket.request.session.save();
+    try {
+      const res = await pool.query(
+        `SELECT * FROM users WHERE username = $1 AND password = $2`,
+        [username, password]
+      );
 
-    callback({ success: true });
+      if (res.rows.length === 0) {
+        return callback({ success: false, message: "Invalid credentials" });
+      }
 
-    // Optionally send stats back
-    const stats = await pool.query(`SELECT * FROM user_stats WHERE username = $1`, [username]);
-    if (stats.rows.length) {
-      socket.emit("user_stats", stats.rows[0]);
+      socket.request.session.username = username;
+      socket.request.session.save();
+      callback({ success: true });
+
+      // Optional: send stats if desired
+      const stats = await pool.query(`SELECT * FROM user_stats WHERE username = $1`, [username]);
+      if (stats.rows.length) {
+        socket.emit("user_stats", stats.rows[0]);
+      }
+
+    } catch (err) {
+      console.error("Login failed:", err);
+      callback({ success: false, message: "Server error" });
     }
+  });
 
-  } catch (err) {
-    console.error("Login failed:", err);
-    callback({ success: false, message: "Server error during login" });
-  }
-});
+  // Register event
+  socket.on("register", async ({ username, email, password }, callback) => {
+    try {
+      const userCheck = await pool.query(
+        `SELECT * FROM users WHERE username = $1 OR email = $2`,
+        [username, email]
+      );
+
+      if (userCheck.rows.length > 0) {
+        return callback({ success: false, message: "Username or email already exists" });
+      }
+
+      await pool.query(
+        `INSERT INTO users (username, email, password) VALUES ($1, $2, $3)`,
+        [username, email, password]
+      );
+
+      await pool.query(`INSERT INTO user_stats (username) VALUES ($1)`, [username]);
+
+      socket.request.session.username = username;
+      socket.request.session.save();
+
+      callback({ success: true });
+
+    } catch (err) {
+      console.error("Registration error:", err);
+      callback({ success: false, message: "Server error" });
+    }
+  });
 
 
   socket.on("join_room", ({ room, username }) => {
