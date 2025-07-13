@@ -55,6 +55,12 @@ const io = new Server(server, {
     credentials: true
   }
 });
+// 1. First attach the session middleware
+io.use((socket, next) => {
+  sessionMiddleware(socket.request, {}, next);
+});
+
+// 2. Then validate the session
 io.use((socket, next) => {
   const session = socket.request.session;
   if (session && session.username) {
@@ -63,10 +69,6 @@ io.use((socket, next) => {
     next(new Error("Unauthorized"));
   }
 });
-io.use((socket, next) => {
-  sessionMiddleware(socket.request, {}, next);
-});
-
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false
