@@ -465,10 +465,20 @@ socket.on("chat_message", ({ room, username, text }) => {
   const roomData = rooms[room];
   if (!roomData) return;
 
+  const entry = roomData.entries.find(e => e.id === entryId);
+  if (!entry) return;
+
+  // 🚫 Prevent voting for your own entry
+  if (entry.username === username) {
+    socket.emit("error_message", "You cannot vote for your own entry.");
+    return;
+  }
+
   roomData.votes[username] = entryId;
   socket.emit("vote_confirmed", entryId);
   io.to(room).emit("votes", roomData.votes);
 });
+
 
   socket.on("disconnect", () => {
     const room = socket.data.room;
