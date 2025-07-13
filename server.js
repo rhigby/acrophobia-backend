@@ -61,15 +61,6 @@ io.use((socket, next) => {
   sessionMiddleware(socket.request, {}, next);
 });
 
-// 2. Then validate the session
-io.use((socket, next) => {
-  const session = socket.request.session;
-  if (session && session.username) {
-    next();
-  } else {
-    next(new Error("Unauthorized"));
-  }
-});
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false
@@ -368,7 +359,14 @@ io.on("connection", (socket) => {
   });
 
 
-  socket.on("join_room", ({ room, username }) => {
+  socket.on("join_room", ({ room }, callback) => {
+  const session = socket.request.session;
+  const username = session?.username;
+
+  if (!username) {
+    return callback?.({ success: false, message: "Unauthorized – not logged in" });
+  }
+
   if (!rooms[room]) {
     rooms[room] = {
       players: [],
@@ -385,13 +383,11 @@ io.on("connection", (socket) => {
 
   // Check if user is already in room
   if (r.players.find(p => p.username === username)) {
-    socket.emit("room_full"); // reuse this error if needed
-    return;
+    return callback?.({ success: false, message: "User already in room" });
   }
 
   if (r.players.length >= MAX_PLAYERS) {
-    socket.emit("room_full");
-    return;
+    return callback?.({ success: false, message: "Room is full" });
   }
 
   socket.join(room);
@@ -402,11 +398,13 @@ io.on("connection", (socket) => {
 
   emitToRoom(room, "players", r.players);
 
-  // Start game if at least 2 players and still waiting
   if (r.players.length >= 2 && r.phase === "waiting") {
     startGame(room);
   }
+
+  callback?.({ success: true });
 });
+
 
 
 
