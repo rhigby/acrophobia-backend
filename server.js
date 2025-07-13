@@ -1,5 +1,17 @@
 // backend/server.js
 require("dotenv").config();
+const session = require("express-session");
+const cookieParser = require("cookie-parser");
+
+const sessionMiddleware = session({
+  secret: process.env.SESSION_SECRET || "supersecret",
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === "production", // make sure you're using HTTPS in production
+    maxAge: 86400000 // 1 day
+  }
+});
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -12,6 +24,11 @@ const allowedOrigins = [
   "https://acrophobia-play.onrender.com",
   "http://localhost:3000"
 ];
+io.use((socket, next) => {
+  sessionMiddleware(socket.request, {}, next);
+});
+app.use(cookieParser());
+app.use(sessionMiddleware);
 
 app.use(cors({
   origin: function (origin, callback) {
@@ -41,7 +58,9 @@ const io = new Server(server, {
   }
 });
 
-
+io.use((socket, next) => {
+  sessionMiddleware(socket.request, {}, next);
+});
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -272,6 +291,40 @@ function showResults(roomId) {
 }
 
 io.on("connection", (socket) => {
+
+  socket.on("login", async ({ username, password }, callback) => {
+  if (!username || !password) {
+    return callback({ success: false, message: "Username and password required" });
+  }
+
+  try {
+    const res = await pool.query(
+      `SELECT * FROM users WHERE username = $1 AND password = $2`,
+      [username, password]
+    );
+
+    if (res.rows.length === 0) {
+      return callback({ success: false, message: "Invalid credentials" });
+    }
+
+    // ✅ Set the username in the session
+    socket.request.session.username = username;
+    socket.request.session.save();
+
+    callback({ success: true });
+
+    // Optionally send stats back
+    const stats = await pool.query(`SELECT * FROM user_stats WHERE username = $1`, [username]);
+    if (stats.rows.length) {
+      socket.emit("user_stats", stats.rows[0]);
+    }
+
+  } catch (err) {
+    console.error("Login failed:", err);
+    callback({ success: false, message: "Server error during login" });
+  }
+});
+
 
   socket.on("join_room", ({ room, username }) => {
   if (!rooms[room]) {
