@@ -125,10 +125,12 @@ function revealAcronymLetters(roomId, acronym, callback) {
     index++;
     if (index >= acronym.length) {
       clearInterval(interval);
+      emitToRoom(roomId, "acronym_ready"); // ✅ tell clients it's done
       callback();
     }
   }, 2000);
 }
+
 
 function startGame(roomId) {
   const room = rooms[roomId];
