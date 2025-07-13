@@ -120,14 +120,14 @@ function revealAcronymLetters(roomId, acronym, callback) {
   const interval = setInterval(() => {
     if (!rooms[roomId]) return clearInterval(interval);
     emitToRoom(roomId, "acronym", acronym.substring(0, index + 1));
-    emitToRoom(roomId, "beep");
+    emitToRoom(roomId, "letter_beep");
     index++;
     if (index >= acronym.length) {
       clearInterval(interval);
       emitToRoom(roomId, "acronym_ready"); // ✅ tell clients it's done
       callback();
     }
-  }, 2000);
+  }, 1000);
 }
 
 
