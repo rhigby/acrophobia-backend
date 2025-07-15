@@ -2,7 +2,6 @@
 require("dotenv").config();
 const session = require("express-session");
 const cookieParser = require("cookie-parser");
-const roomRounds = {};
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -306,6 +305,17 @@ function showResults(roomId) {
     }
   });
 }
+function getRoomStats() {
+  const stats = {};
+  for (const roomName in rooms) {
+    stats[roomName] = {
+      players: rooms[roomName].players.length,
+      round: rooms[roomName].round || 0,
+    };
+  }
+  return stats;
+}
+
 
 io.on("connection", (socket) => {
 
@@ -399,6 +409,7 @@ socket.on("chat_message", ({ room, username, text }) => {
   io.to(room).emit("chat_message", { username, text });
 });
   socket.on("join_room", ({ room }, callback) => {
+  io.emit("room_list", getRoomStats());
   const session = socket.request.session;
   const username = session?.username;
 
@@ -505,8 +516,8 @@ setInterval(() => {
   const stats = {};
   for (const roomName in rooms) {
     stats[roomName] = {
-      players: rooms[roomName].length,
-      round: roomRounds[roomName] || 0,
+      players: rooms[roomName].players.length,
+      round: rooms[roomName].round || 0,
     };
   }
   io.emit("room_list", stats);
