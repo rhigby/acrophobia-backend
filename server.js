@@ -534,45 +534,31 @@ socket.on("chat_message", ({ room, username, text }) => {
 
 
   socket.on("disconnect", () => {
-    
-    const username = socket.data?.username;
-    const room = socket.data?.room;
+  const username = socket.data?.username;
+  const room = socket.data?.room;
 
-    if (username) {
-      userRooms[username] = "lobby"; // mark user back in lobby
-    // activeUsers still keeps them until you want to expire them
-    }
-    if (!room || !rooms[room]) return;
-     
-  
-    if (username) {
-      userRooms[username] = "lobby"; // ✅ Back to lobby
-      activeUsers.set(username, "lobby");     // ✅ Keep them active
-    }
-
-    if (room && rooms[room]) {
-      rooms[room].players = rooms[room].players.filter((p) => p.id !== socket.id);
-  
-      emitToRoom(room, "players", rooms[room].players);
-    
-      if (rooms[room].players.length === 0) {
-        console.log(`Room ${room} is now empty. Deleting room.`);
-        delete rooms[room];
-        delete roomRounds?.[room]; // if using roomRounds
-      }
-    }
-
-io.emit("active_users", getActiveUserList());
-    // Remove player from room
-  rooms[room].players = rooms[room].players.filter((p) => p.id !== socket.id);
-  emitToRoom(room, "players", rooms[room].players);
-
-  // ✅ If no players are left, delete the room
-  if (rooms[room].players.length === 0) {
-    console.log(`Room ${room} is now empty. Deleting room.`);
-    delete rooms[room];
-    delete roomRounds?.[room]; // if using roomRounds
+  // ✅ Update user state
+  if (username) {
+    userRooms[username] = "lobby";
+    activeUsers.set(username, "lobby");
   }
+
+  // ✅ If the user was in a room, remove them
+  if (room && rooms[room]) {
+    rooms[room].players = rooms[room].players.filter((p) => p.id !== socket.id);
+    emitToRoom(room, "players", rooms[room].players);
+
+    if (rooms[room].players.length === 0) {
+      console.log(`Room ${room} is now empty. Deleting room.`);
+      delete rooms[room];
+      delete roomRounds?.[room];
+    }
+  }
+
+  // ✅ Always update active user list
+  io.emit("active_users", getActiveUserList());
+});
+
 
   
   });
