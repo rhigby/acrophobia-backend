@@ -505,22 +505,20 @@ socket.on("chat_message", ({ room, username, text }) => {
   socket.on("disconnect", () => {
     const room = socket.data.room;
     if (!room || !rooms[room]) return;
-    rooms[room].players = rooms[room].players.filter((p) => p.id !== socket.id);
-    emitToRoom(room, "players", rooms[room].players);
+    // Remove player from room
+  rooms[room].players = rooms[room].players.filter((p) => p.id !== socket.id);
 
-     // ✅ If room is now empty, reset its state
+  // Broadcast updated players
+  emitToRoom(room, "players", rooms[room].players);
+
+  // ✅ If no players are left, delete the room
   if (rooms[room].players.length === 0) {
-    console.log(`Room ${room} is now empty. Resetting.`);
-    rooms[room] = {
-      players: [],
-      scores: {},
-      phase: "waiting",
-      round: 0,
-      entries: [],
-      votes: {},
-      acronym: ""
-    };
+    console.log(`Room ${room} is now empty. Deleting room.`);
+    delete rooms[room];
+    delete roomRounds?.[room]; // if using roomRounds
   }
+
+  
   });
 
   
