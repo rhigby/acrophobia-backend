@@ -3,6 +3,7 @@ require("dotenv").config();
 const session = require("express-session");
 const cookieParser = require("cookie-parser");
 const express = require("express");
+const activeUsers = new Set();
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
@@ -344,6 +345,7 @@ socket.on("login_cookie", ({ username }, callback) => {
 
   // Login event
   socket.on("login", async ({ username, password }, callback) => {
+    activeUsers.add(username);
     console.log("Login received:", username);
     if (!username || !password) {
       return callback({ success: false, message: "Missing credentials" });
@@ -396,7 +398,7 @@ socket.on("login_cookie", ({ username }, callback) => {
 
       socket.request.session.username = username;
       socket.request.session.save();
-
+      activeUsers.add(username);
       callback({ success: true });
 
     } catch (err) {
@@ -505,6 +507,8 @@ socket.on("chat_message", ({ room, username, text }) => {
   socket.on("disconnect", () => {
     const room = socket.data.room;
     if (!room || !rooms[room]) return;
+    const username = socket.data?.username;
+    if (username) activeUsers.delete(username); // ✅ REMOVE from active users
     // Remove player from room
   rooms[room].players = rooms[room].players.filter((p) => p.id !== socket.id);
 
@@ -523,7 +527,9 @@ socket.on("chat_message", ({ room, username, text }) => {
 
   
 });
-
+setInterval(() => {
+  io.emit("active_users", Array.from(activeUsers));
+}, 5000);
 setInterval(() => {
   const stats = {};
   for (const roomName in rooms) {
