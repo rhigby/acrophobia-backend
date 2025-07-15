@@ -524,7 +524,7 @@ socket.on("chat_message", ({ room, username, text }) => {
     const room = socket.data.room;
     if (!room || !rooms[room]) return;
      const username = socket.data?.username;
-    const room = socket.data?.room;
+  
     if (username) {
       userRooms[username] = "lobby"; // ✅ Back to lobby
       activeUsers.add(username);     // ✅ Keep them active
