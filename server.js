@@ -507,6 +507,20 @@ socket.on("chat_message", ({ room, username, text }) => {
     if (!room || !rooms[room]) return;
     rooms[room].players = rooms[room].players.filter((p) => p.id !== socket.id);
     emitToRoom(room, "players", rooms[room].players);
+
+     // ✅ If room is now empty, reset its state
+  if (rooms[room].players.length === 0) {
+    console.log(`Room ${room} is now empty. Resetting.`);
+    rooms[room] = {
+      players: [],
+      scores: {},
+      phase: "waiting",
+      round: 0,
+      entries: [],
+      votes: {},
+      acronym: ""
+    };
+  }
   });
 
   
