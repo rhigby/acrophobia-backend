@@ -340,7 +340,7 @@ socket.on("login_cookie", ({ username }, callback) => {
   session.save();
 
   // ✅ Add to active users right after login
-  activeUsers.add(username);
+  activeUsers.set(username, "lobby");
   userRooms[username] = "lobby";
   io.emit("active_users", getActiveUserList());
 
@@ -354,8 +354,7 @@ socket.on("login_cookie", ({ username }, callback) => {
 
   // Login event
   socket.on("login", async ({ username, password }, callback) => {
-      activeUsers.add(username);
-      userRooms[username] = "lobby";
+      activeUsers.set(username, "lobby");
       io.emit("active_users", getActiveUserList());
 
     console.log("Login received:", username);
@@ -410,7 +409,7 @@ socket.on("login_cookie", ({ username }, callback) => {
 
       socket.request.session.username = username;
       socket.request.session.save();
-      activeUsers.add(username);
+       activeUsers.set(username, "lobby");
       callback({ success: true });
 
     } catch (err) {
@@ -427,7 +426,7 @@ socket.on("chat_message", ({ room, username, text }) => {
   const session = socket.request.session;
   const username = session?.username;
  
-  userRooms[username] = room;
+  activeUsers.set(username, room);
   io.emit("active_users", getActiveUserList());
 
 
@@ -527,7 +526,7 @@ socket.on("chat_message", ({ room, username, text }) => {
   
     if (username) {
       userRooms[username] = "lobby"; // ✅ Back to lobby
-      activeUsers.add(username);     // ✅ Keep them active
+      activeUsers.set(username, "lobby");     // ✅ Keep them active
     }
 
     if (room && rooms[room]) {
