@@ -4,6 +4,7 @@ const session = require("express-session");
 const cookieParser = require("cookie-parser");
 const express = require("express");
 const activeUsers = new Map();
+const userRooms = {}; // Track each user's current room
 const roomRounds = {};
 const http = require("http");
 const { Server } = require("socket.io");
@@ -339,8 +340,10 @@ socket.on("login_cookie", ({ username }, callback) => {
   session.save();
 
   // ✅ Add to active users right after login
-  activeUsers.set(username, null); // 👈 set to lobby initially
-  io.emit("active_users", Array.from(activeUsers.entries()));
+  activeUsers.add(username);
+  userRooms[username] = "lobby";
+  io.emit("active_users", getActiveUserList());
+
 
   callback({ success: true, username });
 });
@@ -351,8 +354,10 @@ socket.on("login_cookie", ({ username }, callback) => {
 
   // Login event
   socket.on("login", async ({ username, password }, callback) => {
-     activeUsers.set(username, null); // 👈 set to lobby initially
-      io.emit("active_users", Array.from(activeUsers.entries()));
+      activeUsers.add(username);
+      userRooms[username] = "lobby";
+      io.emit("active_users", getActiveUserList());
+
     console.log("Login received:", username);
     if (!username || !password) {
       return callback({ success: false, message: "Missing credentials" });
@@ -422,8 +427,8 @@ socket.on("chat_message", ({ room, username, text }) => {
   const session = socket.request.session;
   const username = session?.username;
  
-  activeUsers.set(username, null); // 👈 set to lobby initially
-  io.emit("active_users", Array.from(activeUsers.entries()));
+  userRooms[username] = room;
+  io.emit("active_users", getActiveUserList());
 
 
   if (!username) {
@@ -518,11 +523,25 @@ socket.on("chat_message", ({ room, username, text }) => {
   socket.on("disconnect", () => {
     const room = socket.data.room;
     if (!room || !rooms[room]) return;
-   const username = socket.data?.username;
+     const username = socket.data?.username;
+    const room = socket.data?.room;
     if (username) {
-      activeUsers.delete(username); // Remove from active list
-      io.emit("active_users", Array.from(activeUsers.entries()));
+      userRooms[username] = "lobby"; // ✅ Back to lobby
+      activeUsers.add(username);     // ✅ Keep them active
     }
+
+    if (room && rooms[room]) {
+      rooms[room].players = rooms[room].players.filter((p) => p.id !== socket.id);
+      emitToRoom(room, "players", rooms[room].players);
+    
+      if (rooms[room].players.length === 0) {
+        console.log(`Room ${room} is now empty. Deleting room.`);
+        delete rooms[room];
+        delete roomRounds?.[room]; // if using roomRounds
+      }
+    }
+
+io.emit("active_users", getActiveUserList());
     // Remove player from room
   rooms[room].players = rooms[room].players.filter((p) => p.id !== socket.id);
 
