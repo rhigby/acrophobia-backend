@@ -3,7 +3,7 @@ require("dotenv").config();
 const session = require("express-session");
 const cookieParser = require("cookie-parser");
 const express = require("express");
-const activeUsers = new Set();
+const activeUsers = new Map();
 const roomRounds = {};
 const http = require("http");
 const { Server } = require("socket.io");
@@ -339,8 +339,8 @@ socket.on("login_cookie", ({ username }, callback) => {
   session.save();
 
   // ✅ Add to active users right after login
-  activeUsers.add(username);
-  io.emit("active_users", Array.from(activeUsers));
+  activeUsers.set(username, null); // 👈 set to lobby initially
+  io.emit("active_users", Array.from(activeUsers.entries()));
 
   callback({ success: true, username });
 });
@@ -351,7 +351,8 @@ socket.on("login_cookie", ({ username }, callback) => {
 
   // Login event
   socket.on("login", async ({ username, password }, callback) => {
-    activeUsers.add(username);
+     activeUsers.set(username, null); // 👈 set to lobby initially
+      io.emit("active_users", Array.from(activeUsers.entries()));
     console.log("Login received:", username);
     if (!username || !password) {
       return callback({ success: false, message: "Missing credentials" });
@@ -420,8 +421,11 @@ socket.on("chat_message", ({ room, username, text }) => {
   io.emit("room_list", getRoomStats());
   const session = socket.request.session;
   const username = session?.username;
-  activeUsers.add(username);
-  io.emit("active_users", Array.from(activeUsers));
+ 
+  activeUsers.set(username, null); // 👈 set to lobby initially
+  io.emit("active_users", Array.from(activeUsers.entries()));
+
+
   if (!username) {
     return callback?.({ success: false, message: "Unauthorized – not logged in" });
   }
@@ -514,8 +518,11 @@ socket.on("chat_message", ({ room, username, text }) => {
   socket.on("disconnect", () => {
     const room = socket.data.room;
     if (!room || !rooms[room]) return;
-    const username = socket.data?.username;
-    if (username) activeUsers.delete(username); // ✅ REMOVE from active users
+   const username = socket.data?.username;
+    if (username) {
+      activeUsers.delete(username); // Remove from active list
+      io.emit("active_users", Array.from(activeUsers.entries()));
+    }
     // Remove player from room
   rooms[room].players = rooms[room].players.filter((p) => p.id !== socket.id);
 
@@ -535,7 +542,7 @@ socket.on("chat_message", ({ room, username, text }) => {
   
 });
 setInterval(() => {
-  io.emit("active_users", Array.from(activeUsers));
+    io.emit("active_users", Array.from(activeUsers.entries()));
 }, 500);
 setInterval(() => {
   const stats = {};
