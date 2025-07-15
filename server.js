@@ -4,7 +4,6 @@ const session = require("express-session");
 const cookieParser = require("cookie-parser");
 const express = require("express");
 const activeUsers = new Set();
-const rooms = {};
 const roomRounds = {};
 const http = require("http");
 const { Server } = require("socket.io");
