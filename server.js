@@ -542,8 +542,22 @@ socket.on("chat_message", ({ room, username, text }) => {
   
 });
 setInterval(() => {
-    io.emit("active_users", Array.from(activeUsers.entries()));
-}, 500);
+  const userList = [];
+
+  io.sockets.sockets.forEach((socket) => {
+    const username = socket.data?.username;
+    const room = socket.data?.room;
+    if (username) {
+      userList.push({
+        username,
+        room: room || "lobby"
+      });
+    }
+  });
+
+  io.emit("active_users", userList);
+}, 5000);
+
 setInterval(() => {
   const stats = {};
   for (const roomName in rooms) {
