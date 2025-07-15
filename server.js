@@ -337,6 +337,11 @@ socket.on("login_cookie", ({ username }, callback) => {
   const session = socket.request.session;
   session.username = username;
   session.save();
+
+  // ✅ Add to active users right after login
+  activeUsers.add(username);
+  io.emit("active_users", Array.from(activeUsers));
+
   callback({ success: true, username });
 });
 
