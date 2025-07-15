@@ -90,6 +90,14 @@ async function initDb() {
 
 initDb().catch(console.error);
 
+function getActiveUserList() {
+  return Array.from(activeUsers.entries()).map(([username, room]) => ({
+    username,
+    room
+  }));
+}
+
+
 const rooms = {};
 const MAX_PLAYERS = 10;
 const MAX_ROUNDS = 5;
