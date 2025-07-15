@@ -534,7 +534,14 @@ socket.on("chat_message", ({ room, username, text }) => {
 
 
   socket.on("disconnect", () => {
-    const room = socket.data.room;
+    
+    const username = socket.data?.username;
+    const room = socket.data?.room;
+
+    if (username) {
+      userRooms[username] = "lobby"; // mark user back in lobby
+    // activeUsers still keeps them until you want to expire them
+    }
     if (!room || !rooms[room]) return;
      const username = socket.data?.username;
   
@@ -545,6 +552,7 @@ socket.on("chat_message", ({ room, username, text }) => {
 
     if (room && rooms[room]) {
       rooms[room].players = rooms[room].players.filter((p) => p.id !== socket.id);
+  
       emitToRoom(room, "players", rooms[room].players);
     
       if (rooms[room].players.length === 0) {
@@ -557,8 +565,6 @@ socket.on("chat_message", ({ room, username, text }) => {
 io.emit("active_users", getActiveUserList());
     // Remove player from room
   rooms[room].players = rooms[room].players.filter((p) => p.id !== socket.id);
-
-  // Broadcast updated players
   emitToRoom(room, "players", rooms[room].players);
 
   // ✅ If no players are left, delete the room
