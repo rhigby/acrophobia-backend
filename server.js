@@ -543,7 +543,7 @@ socket.on("chat_message", ({ room, username, text }) => {
     // activeUsers still keeps them until you want to expire them
     }
     if (!room || !rooms[room]) return;
-     const username = socket.data?.username;
+     
   
     if (username) {
       userRooms[username] = "lobby"; // ✅ Back to lobby
