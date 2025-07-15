@@ -536,7 +536,7 @@ socket.on("chat_message", ({ room, username, text }) => {
 });
 setInterval(() => {
   io.emit("active_users", Array.from(activeUsers));
-}, 5000);
+}, 500);
 setInterval(() => {
   const stats = {};
   for (const roomName in rooms) {
