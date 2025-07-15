@@ -560,11 +560,7 @@ socket.on("chat_message", ({ room, username, text }) => {
 });
 
 
-  
-  });
 
-  
-});
 setInterval(() => {
   const userList = [];
 
