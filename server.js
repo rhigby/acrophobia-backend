@@ -559,7 +559,7 @@ socket.on("chat_message", ({ room, username, text }) => {
   io.emit("active_users", getActiveUserList());
 });
 
-
+});
 
 setInterval(() => {
   const userList = [];
