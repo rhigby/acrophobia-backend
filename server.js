@@ -501,6 +501,17 @@ socket.on("chat_message", ({ room, username, text }) => {
   
 });
 
+setInterval(() => {
+  const stats = {};
+  for (const roomName in rooms) {
+    stats[roomName] = {
+      players: rooms[roomName].length,
+      round: roomRounds[roomName] || 0,
+    };
+  }
+  io.emit("room_list", stats);
+}, 1000);
+
 server.listen(3001, () => console.log("✅ Acrophobia backend running on port 3001"));
 
 
