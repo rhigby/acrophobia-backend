@@ -415,7 +415,8 @@ socket.on("chat_message", ({ room, username, text }) => {
   io.emit("room_list", getRoomStats());
   const session = socket.request.session;
   const username = session?.username;
-
+  activeUsers.add(username);
+  io.emit("active_users", Array.from(activeUsers));
   if (!username) {
     return callback?.({ success: false, message: "Unauthorized – not logged in" });
   }
