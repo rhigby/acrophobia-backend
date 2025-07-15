@@ -347,13 +347,16 @@ socket.on("login_cookie", ({ username }, callback) => {
   session.username = username;
   session.save();
 
-  // ✅ Add to active users right after login
+ // Store the user on the socket
+  socket.data.username = username;
+
+  // Only track as active after socket is fully authenticated
   activeUsers.set(username, "lobby");
   userRooms[username] = "lobby";
   io.emit("active_users", getActiveUserList());
 
+  callback({ success: true });
 
-  callback({ success: true, username });
 });
 
 
@@ -362,8 +365,11 @@ socket.on("login_cookie", ({ username }, callback) => {
 
   // Login event
   socket.on("login", async ({ username, password }, callback) => {
-      activeUsers.set(username, "lobby");
-      io.emit("active_users", getActiveUserList());
+       socket.data.username = username;
+
+        activeUsers.set(username, "lobby");
+        userRooms[username] = "lobby";
+        io.emit("active_users", getActiveUserList());
 
     console.log("Login received:", username);
     if (!username || !password) {
