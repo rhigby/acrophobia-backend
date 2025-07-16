@@ -351,26 +351,35 @@ io.on("connection", (socket) => {
 
 // ✅ Move this OUTSIDE of check_session
 socket.on("login_cookie", ({ username }, callback) => {
-  if (!username) return callback({ success: false });
+  // Step 1: Validate input
+  if (!username) {
+    return callback({ success: false, message: "Missing username" });
+  }
 
-  // Set session and socket data
-  const session = socket.request.session;
-  session.username = username;
-  session.save();
+  try {
+    // Step 2: Store session and socket data
+    socket.request.session.username = username;
+    socket.request.session.save();
 
-  socket.data.username = username;
+    socket.data.username = username;
 
-  // Track user's socket and room
-  userSockets.set(username, socket.id);         // ✅ track socket for private messaging
-  activeUsers.set(username, "lobby");
-  userRooms[username] = "lobby";
+    // Step 3: Track socket, lobby status, and user-room
+    userSockets.set(username, socket.id);        // for private messaging
+    activeUsers.set(username, "lobby");
+    userRooms[username] = "lobby";
 
-  // Broadcast updated active users
-  io.emit("active_users", getActiveUserList());
+    // Step 4: Notify frontend with updated user list
+    io.emit("active_users", getActiveUserList());
 
-  // Return success
-  callback({ success: true });
+    // Step 5: Send confirmation to the client
+    callback({ success: true });
+
+  } catch (err) {
+    console.error("login_cookie error:", err);
+    callback({ success: false, message: "Server error during session login" });
+  }
 });
+
 
 
 
@@ -379,48 +388,54 @@ socket.on("login_cookie", ({ username }, callback) => {
 
   // Login event
   socket.on("login", async ({ username, password }, callback) => {
+  // Step 1: Validate input
   if (!username || !password) {
     return callback({ success: false, message: "Missing credentials" });
   }
 
   try {
-    const res = await pool.query(
+    // Step 2: Authenticate user
+    const userResult = await pool.query(
       `SELECT * FROM users WHERE username = $1 AND password = $2`,
       [username, password]
     );
 
-    if (res.rows.length === 0) {
+    if (userResult.rows.length === 0) {
       return callback({ success: false, message: "Invalid credentials" });
     }
 
-    // ✅ Store user in session
+    // Step 3: Set session data
     socket.request.session.username = username;
     socket.request.session.save();
 
-    // ✅ Track on the socket and in your maps
+    // Step 4: Track on the socket and global maps
     socket.data.username = username;
-    userSockets.set(username, socket.id);
-    activeUsers.set(username, "lobby");
-    userRooms[username] = "lobby";
+    userSockets.set(username, socket.id);        // for private messaging
+    activeUsers.set(username, "lobby");          // for lobby tracking
+    userRooms[username] = "lobby";               // default room
 
-    // ✅ Notify frontend
+    // Step 5: Notify clients
     io.emit("active_users", getActiveUserList());
+
+    // Step 6: Confirm login to client
     callback({ success: true });
 
-    // ✅ Optional stats
-    const stats = await pool.query(
+    // Step 7: Optionally send user stats (if exists)
+    const statsRes = await pool.query(
       `SELECT * FROM user_stats WHERE username = $1`,
       [username]
     );
-    if (stats.rows.length) {
-      socket.emit("user_stats", stats.rows[0]);
+
+    if (statsRes.rows.length > 0) {
+      socket.emit("user_stats", statsRes.rows[0]);
     }
 
   } catch (err) {
-    console.error("Login failed:", err);
-    callback({ success: false, message: "Server error" });
+    console.error("Login error:", err);
+    callback({ success: false, message: "Server error during login" });
   }
 });
+
 
 
 
