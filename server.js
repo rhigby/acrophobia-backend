@@ -346,239 +346,249 @@ socket.on("check_session", (callback) => {
     callback({ authenticated: false });
   }
 });
+io.on("connection", (socket) => {
+  socket.on("check_session", (callback) => {
+    const session = socket.request.session;
+    if (session && session.username) {
+      callback({ authenticated: true, username: session.username });
+    } else {
+      callback({ authenticated: false });
+    }
+  });
 
-// ✅ Move this OUTSIDE of check_session
-socket.on("login_cookie", ({ username }, callback) => {
-  if (!username) return callback({ success: false });
+  socket.on("login_cookie", ({ username }, callback) => {
+    if (!username) return callback({ success: false });
 
-  try {
-    socket.request.session.username = username;
-    socket.request.session.save();
+    try {
+      socket.request.session.username = username;
+      socket.request.session.save();
+      socket.data.username = username;
+
+      userSockets.set(username, socket.id);
+      activeUsers.set(username, "lobby");
+      userRooms[username] = "lobby";
+
+      io.emit("active_users", getActiveUserList());
+      callback({ success: true });
+    } catch (err) {
+      console.error("login_cookie error:", err);
+      callback({ success: false, message: "Server error during session login" });
+    }
+  });
+
+  console.log("User connected:", socket.id);
+
+  socket.on("login", async ({ username, password }, callback) => {
+    if (!username || !password) {
+      return callback({ success: false, message: "Missing credentials" });
+    }
+
+    try {
+      const userResult = await pool.query(
+        `SELECT * FROM users WHERE username = $1 AND password = $2`,
+        [username, password]
+      );
+
+      if (userResult.rows.length === 0) {
+        return callback({ success: false, message: "Invalid credentials" });
+      }
+
+      socket.request.session.username = username;
+      socket.request.session.save();
+      socket.data.username = username;
+
+      userSockets.set(username, socket.id);
+      activeUsers.set(username, "lobby");
+      userRooms[username] = "lobby";
+
+      io.emit("active_users", getActiveUserList());
+      callback({ success: true });
+
+      const statsRes = await pool.query(
+        `SELECT * FROM user_stats WHERE username = $1`,
+        [username]
+      );
+
+      if (statsRes.rows.length > 0) {
+        socket.emit("user_stats", statsRes.rows[0]);
+      }
+    } catch (err) {
+      console.error("Login error:", err);
+      callback({ success: false, message: "Server error during login" });
+    }
+  });
+
+  socket.on("register", async ({ username, email, password }, callback) => {
+    try {
+      const userCheck = await pool.query(
+        `SELECT * FROM users WHERE username = $1 OR email = $2`,
+        [username, email]
+      );
+
+      if (userCheck.rows.length > 0) {
+        return callback({ success: false, message: "Username or email already exists" });
+      }
+
+      await pool.query(
+        `INSERT INTO users (username, email, password) VALUES ($1, $2, $3)`,
+        [username, email, password]
+      );
+
+      await pool.query(`INSERT INTO user_stats (username) VALUES ($1)`, [username]);
+
+      socket.request.session.username = username;
+      socket.request.session.save();
+      activeUsers.set(username, "lobby");
+      callback({ success: true });
+    } catch (err) {
+      console.error("Registration error:", err);
+      callback({ success: false, message: "Server error" });
+    }
+  });
+
+  socket.on("private_message", ({ to, message }) => {
+    const from = socket.data?.username;
+    if (!from || !to || !message) return;
+
+    const recipientSocketId = userSockets.get(to);
+
+    if (recipientSocketId) {
+      io.to(recipientSocketId).emit("private_message", {
+        from,
+        text: message,
+        private: true
+      });
+
+      socket.emit("private_message", {
+        from: `to ${to}`,
+        text: message,
+        private: true
+      });
+    } else {
+      socket.emit("private_message", {
+        from: "system",
+        text: `❌ User '${to}' is not online or doesn't exist.`,
+        private: true
+      });
+    }
+  });
+
+  socket.on("chat_message", ({ room, username, text }) => {
+    io.to(room).emit("chat_message", { username, text });
+  });
+
+  socket.on("join_room", ({ room }, callback) => {
+    io.emit("room_list", getRoomStats());
+    const session = socket.request.session;
+    const username = session?.username;
+
+    activeUsers.set(username, room);
+    io.emit("active_users", getActiveUserList());
+
+    if (!username) {
+      return callback?.({ success: false, message: "Unauthorized – not logged in" });
+    }
+
+    if (!rooms[room]) {
+      rooms[room] = {
+        players: [],
+        scores: {},
+        phase: "waiting",
+        round: 0,
+        entries: [],
+        votes: {},
+        acronym: ""
+      };
+    }
+
+    const r = rooms[room];
+
+    if (r.players.find(p => p.username === username)) {
+      return callback?.({ success: false, message: "User already in room" });
+    }
+
+    if (r.players.length >= MAX_PLAYERS) {
+      return callback?.({ success: false, message: "Room is full" });
+    }
+
+    socket.join(room);
+    socket.data.room = room;
     socket.data.username = username;
 
-    userSockets.set(username, socket.id);
-    activeUsers.set(username, "lobby");
-    userRooms[username] = "lobby";
+    r.players.push({ id: socket.id, username });
+
+    emitToRoom(room, "players", r.players);
+
+    if (r.players.length >= 2 && r.phase === "waiting") {
+      startGame(room);
+    }
+
+    callback?.({ success: true });
+  });
+
+  socket.on("submit_entry", ({ room, username, text }) => {
+    const roomData = rooms[room];
+    if (!roomData) return;
+
+    if (roomData.entries.find(e => e.username === username)) return;
+
+    const id = `${Date.now()}-${Math.random()}`;
+    const elapsed = Date.now() - roomData.roundStartTime;
+    const entry = { id, username, text, time: Date.now(), elapsed };
+
+    roomData.entries.push(entry);
+
+    const submittedUsernames = roomData.entries.map(e => e.username);
+    emitToRoom(room, "submitted_users", submittedUsernames);
+
+    socket.emit("entry_submitted", { id, text });
+    io.to(room).emit("entries", roomData.entries);
+  });
+
+  socket.on("vote_entry", ({ room, username, entryId }) => {
+    const roomData = rooms[room];
+    if (!roomData) return;
+
+    const entry = roomData.entries.find(e => e.id === entryId);
+    if (!entry) return;
+
+    if (entry.username === username) {
+      socket.emit("error_message", "You cannot vote for your own entry.");
+      return;
+    }
+
+    roomData.votes[username] = entryId;
+    socket.emit("vote_confirmed", entryId);
+    io.to(room).emit("votes", roomData.votes);
+  });
+
+  socket.on("disconnect", () => {
+    const username = socket.data?.username;
+    if (username) {
+      userSockets.delete(username);
+    }
+    const room = socket.data?.room;
+
+    if (username) {
+      userRooms[username] = "lobby";
+      activeUsers.set(username, "lobby");
+    }
+
+    if (room && rooms[room]) {
+      rooms[room].players = rooms[room].players.filter((p) => p.id !== socket.id);
+      emitToRoom(room, "players", rooms[room].players);
+
+      if (rooms[room].players.length === 0) {
+        console.log(`Room ${room} is now empty. Deleting room.`);
+        delete rooms[room];
+        delete roomRounds?.[room];
+      }
+    }
 
     io.emit("active_users", getActiveUserList());
-    callback({ success: true });
-  } catch (err) {
-    console.error("login_cookie error:", err);
-    callback({ success: false, message: "Server error during session login" });
-  }
+  });
 });
 
-console.log("User connected:", socket.id);
-
-socket.on("login", async ({ username, password }, callback) => {
-  if (!username || !password) {
-    return callback({ success: false, message: "Missing credentials" });
-  }
-
-  try {
-    const userResult = await pool.query(
-      `SELECT * FROM users WHERE username = $1 AND password = $2`,
-      [username, password]
-    );
-
-    if (userResult.rows.length === 0) {
-      return callback({ success: false, message: "Invalid credentials" });
-    }
-
-    socket.request.session.username = username;
-    socket.request.session.save();
-    socket.data.username = username;
-
-    userSockets.set(username, socket.id);
-    activeUsers.set(username, "lobby");
-    userRooms[username] = "lobby";
-
-    io.emit("active_users", getActiveUserList());
-    callback({ success: true });
-
-    const statsRes = await pool.query(
-      `SELECT * FROM user_stats WHERE username = $1`,
-      [username]
-    );
-
-    if (statsRes.rows.length > 0) {
-      socket.emit("user_stats", statsRes.rows[0]);
-    }
-  } catch (err) {
-    console.error("Login error:", err);
-    callback({ success: false, message: "Server error during login" });
-  }
-});
-
-socket.on("register", async ({ username, email, password }, callback) => {
-  try {
-    const userCheck = await pool.query(
-      `SELECT * FROM users WHERE username = $1 OR email = $2`,
-      [username, email]
-    );
-
-    if (userCheck.rows.length > 0) {
-      return callback({ success: false, message: "Username or email already exists" });
-    }
-
-    await pool.query(
-      `INSERT INTO users (username, email, password) VALUES ($1, $2, $3)`,
-      [username, email, password]
-    );
-
-    await pool.query(`INSERT INTO user_stats (username) VALUES ($1)`, [username]);
-
-    socket.request.session.username = username;
-    socket.request.session.save();
-    activeUsers.set(username, "lobby");
-    callback({ success: true });
-  } catch (err) {
-    console.error("Registration error:", err);
-    callback({ success: false, message: "Server error" });
-  }
-});
-
-socket.on("private_message", ({ to, message }) => {
-  const from = socket.data?.username;
-  if (!from || !to || !message) return;
-
-  const recipientSocketId = userSockets.get(to);
-
-  if (recipientSocketId) {
-    io.to(recipientSocketId).emit("private_message", {
-      from,
-      text: message,
-      private: true
-    });
-
-    socket.emit("private_message", {
-      from: `to ${to}`,
-      text: message,
-      private: true
-    });
-  } else {
-    socket.emit("private_message", {
-      from: "system",
-      text: `❌ User '${to}' is not online or doesn't exist.`,
-      private: true
-    });
-  }
-});
-
-socket.on("chat_message", ({ room, username, text }) => {
-  io.to(room).emit("chat_message", { username, text });
-});
-
-socket.on("join_room", ({ room }, callback) => {
-  io.emit("room_list", getRoomStats());
-  const session = socket.request.session;
-  const username = session?.username;
-
-  activeUsers.set(username, room);
-  io.emit("active_users", getActiveUserList());
-
-  if (!username) {
-    return callback?.({ success: false, message: "Unauthorized – not logged in" });
-  }
-
-  if (!rooms[room]) {
-    rooms[room] = {
-      players: [],
-      scores: {},
-      phase: "waiting",
-      round: 0,
-      entries: [],
-      votes: {},
-      acronym: ""
-    };
-  }
-
-  const r = rooms[room];
-
-  if (r.players.find(p => p.username === username)) {
-    return callback?.({ success: false, message: "User already in room" });
-  }
-
-  if (r.players.length >= MAX_PLAYERS) {
-    return callback?.({ success: false, message: "Room is full" });
-  }
-
-  socket.join(room);
-  socket.data.room = room;
-  socket.data.username = username;
-
-  r.players.push({ id: socket.id, username });
-
-  emitToRoom(room, "players", r.players);
-
-  if (r.players.length >= 2 && r.phase === "waiting") {
-    startGame(room);
-  }
-
-  callback?.({ success: true });
-});
-
-socket.on("submit_entry", ({ room, username, text }) => {
-  const roomData = rooms[room];
-  if (!roomData) return;
-
-  if (roomData.entries.find(e => e.username === username)) return;
-
-  const id = `${Date.now()}-${Math.random()}`;
-  const elapsed = Date.now() - roomData.roundStartTime;
-  const entry = { id, username, text, time: Date.now(), elapsed };
-
-  roomData.entries.push(entry);
-
-  const submittedUsernames = roomData.entries.map(e => e.username);
-  emitToRoom(room, "submitted_users", submittedUsernames);
-
-  socket.emit("entry_submitted", { id, text });
-  io.to(room).emit("entries", roomData.entries);
-});
-
-socket.on("vote_entry", ({ room, username, entryId }) => {
-  const roomData = rooms[room];
-  if (!roomData) return;
-
-  const entry = roomData.entries.find(e => e.id === entryId);
-  if (!entry) return;
-
-  if (entry.username === username) {
-    socket.emit("error_message", "You cannot vote for your own entry.");
-    return;
-  }
-
-  roomData.votes[username] = entryId;
-  socket.emit("vote_confirmed", entryId);
-  io.to(room).emit("votes", roomData.votes);
-});
-
-socket.on("disconnect", () => {
-  const username = socket.data?.username;
-  if (username) {
-    userSockets.delete(username);
-  }
-  const room = socket.data?.room;
-
-  if (username) {
-    userRooms[username] = "lobby";
-    activeUsers.set(username, "lobby");
-  }
-
-  if (room && rooms[room]) {
-    rooms[room].players = rooms[room].players.filter((p) => p.id !== socket.id);
-    emitToRoom(room, "players", rooms[room].players);
-
-    if (rooms[room].players.length === 0) {
-      console.log(`Room ${room} is now empty. Deleting room.`);
-      delete rooms[room];
-      delete roomRounds?.[room];
-    }
-  }
-
-  io.emit("active_users", getActiveUserList());
-});
 
 
 setInterval(() => {
