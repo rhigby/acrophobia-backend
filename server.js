@@ -1,6 +1,7 @@
 // backend/server.js
 require("dotenv").config();
 const session = require("express-session");
+const pgSession = require("connect-pg-simple")(session);
 const cookieParser = require("cookie-parser");
 const express = require("express");
 const activeUsers = new Map();
@@ -11,11 +12,15 @@ const { Server } = require("socket.io");
 const cors = require("cors");
 const { Pool } = require("pg");
 const sessionMiddleware = session({
+  store: new pgSession({
+    pool: pool,                // Reuse your existing pool
+    tableName: 'session'       // Default is 'session'
+  }),
   secret: "secret-key",
   resave: false,
-  saveUninitialized: true,
+  saveUninitialized: false,
   cookie: {
-    sameSite: "none", // important for cross-origin
+    sameSite: "none",
     secure: true
   }
 });
