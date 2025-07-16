@@ -12,6 +12,7 @@ const { Server } = require("socket.io");
 const cors = require("cors");
 const { Pool } = require("pg");
 const pgSession = require("connect-pg-simple")(session);
+const userSockets = new Map();
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -392,6 +393,9 @@ socket.on("login_cookie", ({ username }, callback) => {
     socket.request.session.username = username;
     socket.request.session.save();
 
+    // ✅ Add this line:
+    userSockets.set(username, socket.id); // <-- map username to current socket ID
+
     activeUsers.set(username, "lobby");
     userRooms[username] = "lobby";
     io.emit("active_users", getActiveUserList());
@@ -408,6 +412,7 @@ socket.on("login_cookie", ({ username }, callback) => {
     callback({ success: false, message: "Server error" });
   }
 });
+
 
 
   // Register event
@@ -549,6 +554,9 @@ socket.on("chat_message", ({ room, username, text }) => {
 
   socket.on("disconnect", () => {
   const username = socket.data?.username;
+  if (username) {
+    userSockets.delete(username);
+  }
   const room = socket.data?.room;
 
   // ✅ Update user state
