@@ -373,42 +373,41 @@ socket.on("login_cookie", ({ username }, callback) => {
 
   // Login event
   socket.on("login", async ({ username, password }, callback) => {
-       socket.data.username = username;
+  if (!username || !password) {
+    return callback({ success: false, message: "Missing credentials" });
+  }
 
-        activeUsers.set(username, "lobby");
-        userRooms[username] = "lobby";
-        io.emit("active_users", getActiveUserList());
+  try {
+    const res = await pool.query(
+      `SELECT * FROM users WHERE username = $1 AND password = $2`,
+      [username, password]
+    );
 
-    console.log("Login received:", username);
-    if (!username || !password) {
-      return callback({ success: false, message: "Missing credentials" });
+    if (res.rows.length === 0) {
+      return callback({ success: false, message: "Invalid credentials" });
     }
 
-    try {
-      const res = await pool.query(
-        `SELECT * FROM users WHERE username = $1 AND password = $2`,
-        [username, password]
-      );
+    // ✅ Only do this after successful login
+    socket.request.session.username = username;
+    socket.request.session.save();
 
-      if (res.rows.length === 0) {
-        return callback({ success: false, message: "Invalid credentials" });
-      }
+    activeUsers.set(username, "lobby");
+    userRooms[username] = "lobby";
+    io.emit("active_users", getActiveUserList());
 
-      socket.request.session.username = username;
-      socket.request.session.save();
-      callback({ success: true });
+    callback({ success: true });
 
-      // Optional: send stats if desired
-      const stats = await pool.query(`SELECT * FROM user_stats WHERE username = $1`, [username]);
-      if (stats.rows.length) {
-        socket.emit("user_stats", stats.rows[0]);
-      }
-
-    } catch (err) {
-      console.error("Login failed:", err);
-      callback({ success: false, message: "Server error" });
+    const stats = await pool.query(`SELECT * FROM user_stats WHERE username = $1`, [username]);
+    if (stats.rows.length) {
+      socket.emit("user_stats", stats.rows[0]);
     }
-  });
+
+  } catch (err) {
+    console.error("Login failed:", err);
+    callback({ success: false, message: "Server error" });
+  }
+});
+
 
   // Register event
   socket.on("register", async ({ username, email, password }, callback) => {
