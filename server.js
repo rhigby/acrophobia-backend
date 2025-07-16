@@ -73,6 +73,13 @@ io.use((socket, next) => {
   sessionMiddleware(socket.request, {}, next);
 });
 
+socket.on("private_message", ({ to, message }) => {
+  const from = socket.data.username;
+  const recipientSocketId = userSockets.get(to);
+  if (recipientSocketId) {
+    io.to(recipientSocketId).emit("private_message", { from, message });
+  }
+});
 
 
 async function initDb() {
