@@ -73,13 +73,7 @@ io.use((socket, next) => {
   sessionMiddleware(socket.request, {}, next);
 });
 
-socket.on("private_message", ({ to, message }) => {
-  const from = socket.data.username;
-  const recipientSocketId = userSockets.get(to);
-  if (recipientSocketId) {
-    io.to(recipientSocketId).emit("private_message", { from, message });
-  }
-});
+
 
 
 async function initDb() {
@@ -445,7 +439,13 @@ socket.on("login_cookie", ({ username }, callback) => {
       callback({ success: false, message: "Server error" });
     }
   });
-
+socket.on("private_message", ({ to, message }) => {
+  const from = socket.data.username;
+  const recipientSocketId = userSockets.get(to);
+  if (recipientSocketId) {
+    io.to(recipientSocketId).emit("private_message", { from, message });
+  }
+});
 socket.on("chat_message", ({ room, username, text }) => {
   io.to(room).emit("chat_message", { username, text });
 });
