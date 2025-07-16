@@ -446,12 +446,14 @@ io.on("connection", (socket) => {
     if (recipientSocketId) {
       io.to(recipientSocketId).emit("private_message", {
         from,
+        to,
         text: message,
         private: true
       });
 
       socket.emit("private_message", {
-        from: `to ${to}`,
+        from,
+        to,
         text: message,
         private: true
       });
@@ -579,6 +581,7 @@ io.on("connection", (socket) => {
     io.emit("active_users", getActiveUserList());
   });
 });
+
 
 
 
