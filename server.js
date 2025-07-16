@@ -353,21 +353,25 @@ io.on("connection", (socket) => {
 socket.on("login_cookie", ({ username }, callback) => {
   if (!username) return callback({ success: false });
 
+  // Set session and socket data
   const session = socket.request.session;
   session.username = username;
   session.save();
 
- // Store the user on the socket
   socket.data.username = username;
 
-  // Only track as active after socket is fully authenticated
+  // Track user's socket and room
+  userSockets.set(username, socket.id);         // ✅ track socket for private messaging
   activeUsers.set(username, "lobby");
   userRooms[username] = "lobby";
+
+  // Broadcast updated active users
   io.emit("active_users", getActiveUserList());
 
+  // Return success
   callback({ success: true });
-
 });
+
 
 
 
@@ -389,20 +393,25 @@ socket.on("login_cookie", ({ username }, callback) => {
       return callback({ success: false, message: "Invalid credentials" });
     }
 
-    // ✅ Only do this after successful login
+    // ✅ Store user in session
     socket.request.session.username = username;
     socket.request.session.save();
 
-    // ✅ Add this line:
-    userSockets.set(username, socket.id); // <-- map username to current socket ID
-
+    // ✅ Track on the socket and in your maps
+    socket.data.username = username;
+    userSockets.set(username, socket.id);
     activeUsers.set(username, "lobby");
     userRooms[username] = "lobby";
-    io.emit("active_users", getActiveUserList());
 
+    // ✅ Notify frontend
+    io.emit("active_users", getActiveUserList());
     callback({ success: true });
 
-    const stats = await pool.query(`SELECT * FROM user_stats WHERE username = $1`, [username]);
+    // ✅ Optional stats
+    const stats = await pool.query(
+      `SELECT * FROM user_stats WHERE username = $1`,
+      [username]
+    );
     if (stats.rows.length) {
       socket.emit("user_stats", stats.rows[0]);
     }
@@ -412,6 +421,7 @@ socket.on("login_cookie", ({ username }, callback) => {
     callback({ success: false, message: "Server error" });
   }
 });
+
 
 
 
