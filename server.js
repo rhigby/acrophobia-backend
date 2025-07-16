@@ -445,12 +445,34 @@ socket.on("login_cookie", ({ username }, callback) => {
     }
   });
 socket.on("private_message", ({ to, message }) => {
-  const from = socket.data.username;
+  const from = socket.request.session?.username;
+
+  if (!from || !to || !message) return;
+
   const recipientSocketId = userSockets.get(to);
+
   if (recipientSocketId) {
-    io.to(recipientSocketId).emit("private_message", { from, message });
+    io.to(recipientSocketId).emit("private_message", {
+      from,
+      text: message,
+    });
+
+    // Optional: also confirm to sender
+    socket.emit("private_message", {
+      from: `to ${to}`,
+      text: message,
+      private: true,
+    });
+  } else {
+    // User not found or not online
+    socket.emit("private_message", {
+      from: "system",
+      text: `❌ User '${to}' is not online or doesn't exist.`,
+      private: true,
+    });
   }
 });
+
 socket.on("chat_message", ({ room, username, text }) => {
   io.to(room).emit("chat_message", { username, text });
 });
