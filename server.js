@@ -337,15 +337,6 @@ function getRoomStats() {
   return stats;
 }
 
-
-socket.on("check_session", (callback) => {
-  const session = socket.request.session;
-  if (session && session.username) {
-    callback({ authenticated: true, username: session.username });
-  } else {
-    callback({ authenticated: false });
-  }
-});
 io.on("connection", (socket) => {
   socket.on("check_session", (callback) => {
     const session = socket.request.session;
