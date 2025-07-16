@@ -1,7 +1,7 @@
 // backend/server.js
 require("dotenv").config();
 const session = require("express-session");
-const pgSession = require("connect-pg-simple")(session);
+
 const cookieParser = require("cookie-parser");
 const express = require("express");
 const activeUsers = new Map();
@@ -11,6 +11,12 @@ const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
 const { Pool } = require("pg");
+const pgSession = require("connect-pg-simple")(session);
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false
+});
 const sessionMiddleware = session({
   store: new pgSession({
     pool: pool,                // Reuse your existing pool
@@ -67,10 +73,7 @@ io.use((socket, next) => {
   sessionMiddleware(socket.request, {}, next);
 });
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false
-});
+
 
 async function initDb() {
   await pool.query(`
