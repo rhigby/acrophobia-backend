@@ -34,8 +34,9 @@ const sessionMiddleware = session({
 const app = express();
 
 const allowedOrigins = [
-  "https://acrophobia-play.onrender.com",
-  "http://localhost:3000"
+  "http://localhost:5173", // vite default port
+  "http://localhost:3000",
+  "https://acrophobia-backend-2.onrender.com"
 ];
 
 app.use(cookieParser());
