@@ -443,27 +443,19 @@ io.on("connection", (socket) => {
 
     const recipientSocketId = userSockets.get(to);
 
-    if (recipientSocketId) {
-      io.to(recipientSocketId).emit("private_message", {
-        from,
-        to,
-        text: message,
-        private: true
-      });
+    const payload = {
+      from,
+      to,
+      text: message,
+      private: true
+    };
 
-      socket.emit("private_message", {
-        from,
-        to,
-        text: message,
-        private: true
-      });
-    } else {
-      socket.emit("private_message", {
-        from: "system",
-        text: `❌ User '${to}' is not online or doesn't exist.`,
-        private: true
-      });
+    if (recipientSocketId) {
+      io.to(recipientSocketId).emit("private_message", payload);
     }
+
+    // ✅ Only emit back to sender if recipient exists
+    socket.emit("private_message_ack", payload);
   });
 
   socket.on("chat_message", ({ room, username, text }) => {
@@ -581,6 +573,7 @@ io.on("connection", (socket) => {
     io.emit("active_users", getActiveUserList());
   });
 });
+
 
 
 
