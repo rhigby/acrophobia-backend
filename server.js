@@ -20,9 +20,10 @@ const pool = new Pool({
 });
 const sessionMiddleware = session({
   store: new pgSession({
-    pool: pool,                // Reuse your existing pool
-    tableName: 'session'       // Default is 'session'
-  }),
+  pool,
+  tableName: "session",
+  createTableIfMissing: true // 👈 just add this line
+}),
   secret: "secret-key",
   resave: false,
   saveUninitialized: false,
