@@ -34,9 +34,8 @@ const sessionMiddleware = session({
 const app = express();
 
 const allowedOrigins = [
-  "http://localhost:5173", // vite default port
-  "http://localhost:3000",
-  "https://acrophobia-backend-2.onrender.com"
+  "https://acrophobia-play.onrender.com",
+  "http://localhost:5173"
 ];
 
 app.use(cookieParser());
@@ -44,10 +43,15 @@ app.use(sessionMiddleware);
 
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error("Not allowed by CORS"));
+    try {
+      const parsedOrigin = new URL(origin).origin; // removes path
+      if (!origin || allowedOrigins.includes(parsedOrigin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    } catch {
+      callback(new Error("Invalid origin"));
     }
   },
   credentials: true
@@ -59,16 +63,22 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: function (origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by Socket.IO CORS"));
+      try {
+        const parsedOrigin = new URL(origin).origin;
+        if (!origin || allowedOrigins.includes(parsedOrigin)) {
+          callback(null, true);
+        } else {
+          callback(new Error("Not allowed by Socket.IO CORS"));
+        }
+      } catch {
+        callback(new Error("Invalid origin"));
       }
     },
     methods: ["GET", "POST"],
     credentials: true
   }
 });
+
 io.engine.use(sessionMiddleware); 
 // 1. First attach the session middleware
 io.use((socket, next) => {
