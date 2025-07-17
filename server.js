@@ -547,6 +547,19 @@ io.on("connection", (socket) => {
     io.to(room).emit("votes", roomData.votes);
   });
 
+socket.on("leave_room", () => {
+    const room = socket.data?.room;
+    const username = socket.data?.username;
+    if (room && rooms[room]) {
+      rooms[room].players = rooms[room].players.filter(p => p.id !== socket.id);
+      emitToRoom(room, "players", rooms[room].players);
+      socket.leave(room);
+      socket.data.room = null;
+      activeUsers.set(username, "lobby");
+      io.emit("active_users", getActiveUserList());
+    }
+  });
+  
   socket.on("disconnect", () => {
     const username = socket.data?.username;
     if (username) {
