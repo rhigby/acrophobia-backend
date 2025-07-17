@@ -37,43 +37,39 @@ const allowedOrigins = [
   "https://acrophobia-play.onrender.com",
   "http://localhost:5173"
 ];
+function safeOriginCheck(origin, callback) {
+  if (!origin) {
+    // Allow requests with no origin (like curl, Postman, or same-origin requests)
+    return callback(null, true);
+  }
+
+  try {
+    const parsedOrigin = new URL(origin).origin; // strips any path
+    if (allowedOrigins.includes(parsedOrigin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  } catch (err) {
+    console.warn("Invalid origin format:", origin);
+    callback(new Error("Invalid origin"));
+  }
+}
+
+app.use(cors({
+  origin: safeOriginCheck,
+  credentials: true
+}));
 
 app.use(cookieParser());
 app.use(sessionMiddleware);
-
-app.use(cors({
-  origin: function (origin, callback) {
-    try {
-      const parsedOrigin = new URL(origin).origin; // removes path
-      if (!origin || allowedOrigins.includes(parsedOrigin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    } catch {
-      callback(new Error("Invalid origin"));
-    }
-  },
-  credentials: true
-}));
 
 // ✅ Create the HTTP server BEFORE passing it to Socket.IO
 const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: function (origin, callback) {
-      try {
-        const parsedOrigin = new URL(origin).origin;
-        if (!origin || allowedOrigins.includes(parsedOrigin)) {
-          callback(null, true);
-        } else {
-          callback(new Error("Not allowed by Socket.IO CORS"));
-        }
-      } catch {
-        callback(new Error("Invalid origin"));
-      }
-    },
+    origin: safeOriginCheck,
     methods: ["GET", "POST"],
     credentials: true
   }
