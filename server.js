@@ -20,18 +20,21 @@ const pool = new Pool({
 });
 const sessionMiddleware = session({
   store: new pgSession({
-  pool,
-  tableName: "session",
-  createTableIfMissing: true // 👈 just add this line
-}),
+    pool: pool,
+    tableName: 'session',
+    createTableIfMissing: true
+  }),
   secret: "secret-key",
   resave: false,
   saveUninitialized: false,
   cookie: {
     sameSite: "none",
-    secure: true
+    secure: true,
+    domain: ".onrender.com", // ✅ explicitly set domain for cross-subdomain cookies
+    path: "/"
   }
 });
+
 const app = express();
 
 const allowedOrigins = [
