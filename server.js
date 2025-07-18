@@ -80,16 +80,31 @@ app.post("/api/messages", express.json(), async (req, res) => {
   }
 
   try {
-    await pool.query(
-      `INSERT INTO messages (title, content, username, reply_to) VALUES ($1, $2, $3, $4)`,
+    const result = await pool.query(
+      `INSERT INTO messages (title, content, username, reply_to) 
+       VALUES ($1, $2, $3, $4) 
+       RETURNING id, timestamp`,
       [title, content, username, replyTo]
     );
+
+    const message = {
+      id: result.rows[0].id,
+      title,
+      content,
+      username,
+      timestamp: result.rows[0].timestamp,
+      reply_to: replyTo
+    };
+
+    io.emit("new_message", message); // ✅ Push to all clients
+
     res.status(201).json({ success: true });
   } catch (err) {
     console.error("Failed to insert message:", err);
     res.status(500).json({ error: "Database insert failed" });
   }
 });
+
 
 
 
