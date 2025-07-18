@@ -39,6 +39,7 @@ const app = express();
 
 const allowedOrigins = [
   "https://acrophobia-play.onrender.com",
+  "https://acrophobia-bhnj.onrender.com",
   "http://localhost:5173"
 ];
 function safeOriginCheck(origin, callback) {
