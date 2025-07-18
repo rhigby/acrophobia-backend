@@ -70,13 +70,20 @@ function safeOriginCheck(origin, callback) {
   }
 }
 
-app.use(cors({
-   origin: [
-    "https://acrophobia-bhnj.onrender.com", // landing page
-    "https://acrophobia-play.onrender.com"  // game page
+app.options("*", cors({
+  origin: [
+    "https://acrophobia-bhnj.onrender.com",
+    "https://acrophobia-play.onrender.com"
   ],
   credentials: true
 }));
+
+app.use((err, req, res, next) => {
+  res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
+  res.header("Access-Control-Allow-Credentials", "true");
+  next(err);
+});
+
 
 app.use(cookieParser());
 app.use(sessionMiddleware);
