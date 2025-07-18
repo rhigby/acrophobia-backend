@@ -62,13 +62,24 @@ function safeOriginCheck(origin, callback) {
 }
 
 app.use(cors({
-  origin: safeOriginCheck,
+   origin: [
+    "https://acrophobia-bhnj.onrender.com", // landing page
+    "https://acrophobia-play.onrender.com"  // game page
+  ],
   credentials: true
 }));
 
 app.use(cookieParser());
 app.use(sessionMiddleware);
-
+app.use(session({
+  secret: "secretkey",
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    sameSite: "none",      // important
+    secure: true           // required on HTTPS
+  }
+}));
 const messages = [];
 
 app.post("/api/messages", express.json(), async (req, res) => {
