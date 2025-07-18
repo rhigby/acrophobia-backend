@@ -72,25 +72,26 @@ app.use(sessionMiddleware);
 const messages = [];
 
 app.get("/api/messages", (req, res) => {
-  const topLevel = messages.filter(m => !m.replyTo);
-  const repliesMap = {};
+  const messageMap = {};
+  const roots = [];
 
-  // Group replies by parent ID
-  messages.forEach(msg => {
-    if (msg.replyTo) {
-      if (!repliesMap[msg.replyTo]) repliesMap[msg.replyTo] = [];
-      repliesMap[msg.replyTo].push(msg);
+  // Step 1: Build a map of all messages by id
+  messages.forEach((msg) => {
+    messageMap[msg.id] = { ...msg, replies: [] };
+  });
+
+  // Step 2: Build the tree by pushing replies into their parents
+  messages.forEach((msg) => {
+    if (msg.replyTo && messageMap[msg.replyTo]) {
+      messageMap[msg.replyTo].replies.push(messageMap[msg.id]);
+    } else if (!msg.replyTo) {
+      roots.push(messageMap[msg.id]);
     }
   });
 
-  // Attach replies to top-level messages
-  const attachReplies = (msg) => ({
-    ...msg,
-    replies: repliesMap[msg.id] || []
-  });
-
-  res.json(topLevel.map(attachReplies));
+  res.json(roots);
 });
+
 
 
 
