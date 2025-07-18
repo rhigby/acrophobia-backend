@@ -36,6 +36,13 @@ const sessionMiddleware = session({
 });
 
 const app = express();
+app.options("*", cors({
+  origin: [
+    "https://acrophobia-bhnj.onrender.com",
+    "https://acrophobia-play.onrender.com"
+  ],
+  credentials: true
+}));
 
 app.get("/api/me", (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
@@ -74,13 +81,7 @@ function safeOriginCheck(origin, callback) {
   }
 }
 
-app.options("*", cors({
-  origin: [
-    "https://acrophobia-bhnj.onrender.com",
-    "https://acrophobia-play.onrender.com"
-  ],
-  credentials: true
-}));
+
 
 app.use((err, req, res, next) => {
   res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
