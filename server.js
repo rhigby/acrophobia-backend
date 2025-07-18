@@ -71,26 +71,26 @@ app.use(sessionMiddleware);
 
 const messages = [];
 
-app.get("/api/messages", (req, res) => {
-  const messageMap = {};
-  const roots = [];
+app.post("/api/messages", express.json(), async (req, res) => {
+  const username = req.session?.username || "Guest";
+  const { title, content, replyTo = null } = req.body;
 
-  // Step 1: Build a map of all messages by id
-  messages.forEach((msg) => {
-    messageMap[msg.id] = { ...msg, replies: [] };
-  });
+  if (!title || !content) {
+    return res.status(400).json({ error: "Missing fields" });
+  }
 
-  // Step 2: Build the tree by pushing replies into their parents
-  messages.forEach((msg) => {
-    if (msg.replyTo && messageMap[msg.replyTo]) {
-      messageMap[msg.replyTo].replies.push(messageMap[msg.id]);
-    } else if (!msg.replyTo) {
-      roots.push(messageMap[msg.id]);
-    }
-  });
-
-  res.json(roots);
+  try {
+    await pool.query(
+      `INSERT INTO messages (title, content, username, reply_to) VALUES ($1, $2, $3, $4)`,
+      [title, content, username, replyTo]
+    );
+    res.status(201).json({ success: true });
+  } catch (err) {
+    console.error("Failed to insert message:", err);
+    res.status(500).json({ error: "Database insert failed" });
+  }
 });
+
 
 
 
@@ -121,6 +121,7 @@ app.get("/api/messages", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch messages" });
   }
 });
+
 
 
 
