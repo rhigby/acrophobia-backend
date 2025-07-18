@@ -68,6 +68,35 @@ app.use(cors({
 app.use(cookieParser());
 app.use(sessionMiddleware);
 
+app.get("/api/stats", async (req, res) => {
+  try {
+    const totalPlayersRes = await pool.query("SELECT COUNT(*) FROM users");
+    const gamesTodayRes = await pool.query(`
+      SELECT COUNT(*) FROM user_stats 
+      WHERE CURRENT_DATE = (SELECT CURRENT_DATE)
+    `);
+    const topPlayerRes = await pool.query(`
+      SELECT username, total_points 
+      FROM user_stats 
+      ORDER BY total_points DESC 
+      LIMIT 1
+    `);
+
+    const roomsLive = Object.keys(rooms).length;
+
+    res.json({
+      totalPlayers: parseInt(totalPlayersRes.rows[0].count, 10),
+      gamesToday: parseInt(gamesTodayRes.rows[0].count, 10),
+      topPlayer: topPlayerRes.rows[0] || { name: "N/A", score: 0 },
+      roomsLive
+    });
+  } catch (err) {
+    console.error("Failed to fetch stats:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+
 // ✅ Create the HTTP server BEFORE passing it to Socket.IO
 const server = http.createServer(app);
 
