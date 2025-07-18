@@ -76,10 +76,7 @@ app.get("/api/messages", (req, res) => {
 });
 
 app.post("/api/messages", express.json(), (req, res) => {
-  const username = req.session?.username;
-  if (!username) return res.status(401).json({ error: "Unauthorized" });
-
-  const { title, content } = req.body;
+  const { username = "Guest", title, content } = req.body;
   if (!title || !content) return res.status(400).json({ error: "Missing fields" });
 
   const message = {
