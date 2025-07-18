@@ -93,9 +93,6 @@ app.get("/api/messages", (req, res) => {
 });
 
 
-  res.json(topLevel.map(attachReplies));
-});
-
 
 app.post("/api/messages", express.json(), (req, res) => {
   const username = req.session?.username || "Guest";
