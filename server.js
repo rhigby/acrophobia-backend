@@ -72,10 +72,12 @@ app.use(sessionMiddleware);
 app.get("/api/stats", async (req, res) => {
   try {
     const totalPlayersRes = await pool.query("SELECT COUNT(*) FROM users");
+
     const gamesTodayRes = await pool.query(`
       SELECT COUNT(*) FROM user_stats 
       WHERE CURRENT_DATE = (SELECT CURRENT_DATE)
     `);
+
     const topPlayerRes = await pool.query(`
       SELECT username, total_points 
       FROM user_stats 
@@ -85,10 +87,15 @@ app.get("/api/stats", async (req, res) => {
 
     const roomsLive = Object.keys(rooms).length;
 
+    const topPlayerRaw = topPlayerRes.rows[0];
+    const topPlayer = topPlayerRaw
+      ? { name: topPlayerRaw.username, score: topPlayerRaw.total_points }
+      : { name: "N/A", score: 0 };
+
     res.json({
       totalPlayers: parseInt(totalPlayersRes.rows[0].count, 10),
       gamesToday: parseInt(gamesTodayRes.rows[0].count, 10),
-      topPlayer: topPlayerRes.rows[0] || { name: "N/A", score: 0 },
+      topPlayer,
       roomsLive
     });
   } catch (err) {
@@ -96,6 +103,7 @@ app.get("/api/stats", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
 
 
 // ✅ Create the HTTP server BEFORE passing it to Socket.IO
