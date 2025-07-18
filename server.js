@@ -37,6 +37,15 @@ const sessionMiddleware = session({
 
 const app = express();
 
+app.get("/api/me", (req, res) => {
+  if (req.session && req.session.user) {
+    return res.json(req.session.user);
+  } else {
+    return res.status(401).json({ error: "Not logged in" });
+  }
+});
+
+
 const allowedOrigins = [
   "https://acrophobia-play.onrender.com",
   "https://acrophobia-bhnj.onrender.com",
