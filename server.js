@@ -95,26 +95,34 @@ app.get("/api/messages", (req, res) => {
 
 
 
-app.post("/api/messages", express.json(), (req, res) => {
-  const username = req.session?.username || "Guest";
-  const { title, content, replyTo = null } = req.body;
+app.get("/api/messages", async (req, res) => {
+  try {
+    const result = await pool.query(`SELECT * FROM messages ORDER BY timestamp DESC`);
+    const allMessages = result.rows;
 
-  if (!title || !content) {
-    return res.status(400).json({ error: "Missing fields" });
+    const topLevel = allMessages.filter(m => !m.reply_to);
+    const repliesMap = {};
+
+    for (const msg of allMessages) {
+      if (msg.reply_to) {
+        if (!repliesMap[msg.reply_to]) repliesMap[msg.reply_to] = [];
+        repliesMap[msg.reply_to].push(msg);
+      }
+    }
+
+    const attachReplies = (msg) => ({
+      ...msg,
+      replies: repliesMap[msg.id] || []
+    });
+
+    res.json(topLevel.map(attachReplies));
+  } catch (err) {
+    console.error("Failed to fetch messages:", err);
+    res.status(500).json({ error: "Failed to fetch messages" });
   }
-
-  const message = {
-    id: Date.now().toString(),  // or use uuid if available
-    title,
-    content,
-    username,
-    timestamp: new Date(),
-    replyTo  // ✅ Capture this field
-  };
-
-  messages.unshift(message); // or save to DB
-  res.status(201).json({ success: true });
 });
+
+
 
 
 app.post("/api/login-cookie", express.json(), async (req, res) => {
@@ -208,6 +216,17 @@ async function initDb() {
       fastest_submission_ms INTEGER
     );
   `);
+
+  await pool.query(`
+  CREATE TABLE IF NOT EXISTS messages (
+    id SERIAL PRIMARY KEY,
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    username TEXT,
+    timestamp TIMESTAMPTZ DEFAULT NOW(),
+    reply_to INTEGER REFERENCES messages(id) ON DELETE CASCADE
+  );
+`);
 }
 
 initDb().catch(console.error);
