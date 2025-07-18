@@ -69,6 +69,31 @@ app.use(cors({
 app.use(cookieParser());
 app.use(sessionMiddleware);
 
+const messages = [];
+
+app.get("/api/messages", (req, res) => {
+  res.json(messages);
+});
+
+app.post("/api/messages", express.json(), (req, res) => {
+  const username = req.session?.username;
+  if (!username) return res.status(401).json({ error: "Unauthorized" });
+
+  const { title, content } = req.body;
+  if (!title || !content) return res.status(400).json({ error: "Missing fields" });
+
+  const message = {
+    title,
+    content,
+    username,
+    timestamp: new Date()
+  };
+
+  messages.unshift(message);
+  res.status(201).json({ success: true });
+});
+
+
 app.get("/api/stats", async (req, res) => {
   try {
     const totalPlayersRes = await pool.query("SELECT COUNT(*) FROM users");
