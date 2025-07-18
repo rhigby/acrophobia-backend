@@ -94,6 +94,21 @@ app.post("/api/messages", express.json(), (req, res) => {
 });
 
 
+app.post("/api/login-cookie", express.json(), async (req, res) => {
+  const { username } = req.body;
+  if (!username) return res.status(400).json({ error: "Missing username" });
+
+  req.session.username = username;
+  req.session.save(err => {
+    if (err) {
+      console.error("Failed to save session:", err);
+      return res.status(500).json({ error: "Failed to set session" });
+    }
+    res.status(200).json({ success: true });
+  });
+});
+
+
 app.get("/api/stats", async (req, res) => {
   try {
     const totalPlayersRes = await pool.query("SELECT COUNT(*) FROM users");
