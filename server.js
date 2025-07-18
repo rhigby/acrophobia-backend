@@ -72,20 +72,26 @@ app.use(sessionMiddleware);
 const messages = [];
 
 app.get("/api/messages", (req, res) => {
-  const topLevel = messages.filter((m) => !m.replyTo);
+  const topLevel = messages.filter(m => !m.replyTo);
   const repliesMap = {};
 
-  for (const msg of messages) {
+  // Group replies by parent ID
+  messages.forEach(msg => {
     if (msg.replyTo) {
       if (!repliesMap[msg.replyTo]) repliesMap[msg.replyTo] = [];
       repliesMap[msg.replyTo].push(msg);
     }
-  }
+  });
 
+  // Attach replies to top-level messages
   const attachReplies = (msg) => ({
     ...msg,
     replies: repliesMap[msg.id] || []
   });
+
+  res.json(topLevel.map(attachReplies));
+});
+
 
   res.json(topLevel.map(attachReplies));
 });
@@ -100,18 +106,17 @@ app.post("/api/messages", express.json(), (req, res) => {
   }
 
   const message = {
-    id: Date.now().toString(), // or use uuid
+    id: Date.now().toString(),  // or use uuid if available
     title,
     content,
     username,
     timestamp: new Date(),
-    replyTo
+    replyTo  // ✅ Capture this field
   };
 
-  messages.unshift(message);
+  messages.unshift(message); // or save to DB
   res.status(201).json({ success: true });
 });
-
 
 
 app.post("/api/login-cookie", express.json(), async (req, res) => {
