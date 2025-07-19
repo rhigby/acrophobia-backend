@@ -75,6 +75,60 @@ app.get("/api/me", (req, res) => {
   }
 });
 
+const bcrypt = require("bcrypt");
+
+// Register user
+app.post("/api/register", async (req, res) => {
+  const { username, email, password } = req.body;
+  if (!username || !email || !password)
+    return res.status(400).json({ error: "All fields required" });
+
+  try {
+    const hashed = await bcrypt.hash(password, 10);
+    await pool.query(
+      "INSERT INTO users (username, email, password) VALUES ($1, $2, $3)",
+      [username, email, hashed]
+    );
+
+    // Initialize session
+    req.session.username = username;
+    req.session.save((err) => {
+      if (err) return res.status(500).json({ error: "Failed to save session" });
+      res.json({ success: true });
+    });
+  } catch (err) {
+    console.error("Register error:", err);
+    res.status(500).json({ error: "User already exists or DB error" });
+  }
+});
+
+// Login user
+app.post("/api/login", async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password)
+    return res.status(400).json({ error: "Missing credentials" });
+
+  try {
+    const result = await pool.query("SELECT * FROM users WHERE username = $1", [username]);
+    const user = result.rows[0];
+    if (!user) return res.status(401).json({ error: "Invalid credentials" });
+
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) return res.status(401).json({ error: "Invalid credentials" });
+
+    req.session.username = username;
+    req.session.save((err) => {
+      if (err) return res.status(500).json({ error: "Failed to save session" });
+      res.json({ success: true });
+    });
+  } catch (err) {
+    console.error("Login error:", err);
+    res.status(500).json({ error: "DB error" });
+  }
+});
+
+
+
 app.post("/api/login-cookie", (req, res) => {
   const { username } = req.body;
   if (!username) return res.status(400).json({ error: "Missing username" });
