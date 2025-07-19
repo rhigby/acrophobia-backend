@@ -67,27 +67,6 @@ app.use(cookieParser());
 app.use(sessionMiddleware);
 app.use(express.json());
 
-// Game utilities
-function createAcronym(length) {
-  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  return Array.from({ length }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
-}
-function emitToRoom(roomId, event, data) {
-  io.to(roomId).emit(event, data);
-}
-
-function getRoomStats() {
-  const stats = {};
-  for (const roomName in rooms) {
-    stats[roomName] = {
-      players: rooms[roomName].players.length,
-      round: rooms[roomName].round || 0,
-    };
-  }
-  return stats;
-}
-
-// API routes
 app.get("/api/me", (req, res) => {
   if (req.session?.username) {
     res.json({ username: req.session.username });
@@ -106,7 +85,6 @@ app.post("/api/login-cookie", (req, res) => {
   });
 });
 
-// Socket setup
 const io = new Server(server, {
   cors: {
     origin: safeOriginCheck,
@@ -117,6 +95,75 @@ const io = new Server(server, {
 
 io.engine.use(sessionMiddleware);
 io.use((socket, next) => sessionMiddleware(socket.request, {}, next));
+
+function createAcronym(length) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  return Array.from({ length }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
+}
+
+function emitToRoom(roomId, event, data) {
+  io.to(roomId).emit(event, data);
+}
+
+function getRoomStats() {
+  const stats = {};
+  for (const roomName in rooms) {
+    stats[roomName] = {
+      players: rooms[roomName].players.length,
+      round: rooms[roomName].round || 0,
+    };
+  }
+  return stats;
+}
+
+function startGame(roomId) {
+  const room = rooms[roomId];
+  if (!room || room.players.length < 2) return;
+  room.round = 1;
+  room.scores = {};
+  runRound(roomId);
+}
+
+function runRound(roomId) {
+  const room = rooms[roomId];
+  if (!room) return;
+  room.phase = "submit";
+  room.entries = [];
+  room.votes = {};
+  room.acronym = createAcronym(room.round + 2);
+  emitToRoom(roomId, "round_number", room.round);
+  emitToRoom(roomId, "phase", room.phase);
+  emitToRoom(roomId, "acronym", room.acronym);
+  setTimeout(() => startVoting(roomId), 60000);
+}
+
+function startVoting(roomId) {
+  const room = rooms[roomId];
+  if (!room) return;
+  room.phase = "vote";
+  emitToRoom(roomId, "phase", "vote");
+  const shuffled = [...room.entries].sort(() => Math.random() - 0.5);
+  emitToRoom(roomId, "entries", shuffled);
+  setTimeout(() => showResults(roomId), 30000);
+}
+
+function showResults(roomId) {
+  const room = rooms[roomId];
+  if (!room) return;
+  room.phase = "results";
+  const voteCounts = {};
+  for (const [user, entryId] of Object.entries(room.votes)) {
+    voteCounts[entryId] = (voteCounts[entryId] || 0) + 1;
+  }
+  emitToRoom(roomId, "votes", voteCounts);
+  emitToRoom(roomId, "phase", "results");
+  if (room.round < MAX_ROUNDS) {
+    room.round++;
+    setTimeout(() => runRound(roomId), 10000);
+  } else {
+    emitToRoom(roomId, "phase", "game_over");
+  }
+}
 
 io.on("connection", (socket) => {
   console.log("Socket connected:", socket.id);
@@ -181,6 +228,34 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("submit_entry", ({ room, username, text }) => {
+    const roomData = rooms[room];
+    if (!roomData) return;
+
+    if (roomData.entries.find(e => e.username === username)) return;
+
+    const id = `${Date.now()}-${Math.random()}`;
+    const elapsed = Date.now() - roomData.roundStartTime;
+    const entry = { id, username, text, time: Date.now(), elapsed };
+
+    roomData.entries.push(entry);
+
+    const submittedUsernames = roomData.entries.map(e => e.username);
+    emitToRoom(room, "submitted_users", submittedUsernames);
+    socket.emit("entry_submitted", { id, text });
+    io.to(room).emit("entries", roomData.entries);
+  });
+
+  socket.on("vote_entry", ({ room, username, entryId }) => {
+    const roomData = rooms[room];
+    if (!roomData) return;
+    const entry = roomData.entries.find(e => e.id === entryId);
+    if (!entry || entry.username === username) return;
+    roomData.votes[username] = entryId;
+    socket.emit("vote_confirmed", entryId);
+    io.to(room).emit("votes", roomData.votes);
+  });
+
   socket.on("disconnect", () => {
     const username = socket.data?.username;
     if (username) {
@@ -198,55 +273,6 @@ io.on("connection", (socket) => {
     io.emit("active_users", Array.from(activeUsers.entries()).map(([u, r]) => ({ username: u, room: r })));
   });
 });
-
-function startGame(roomId) {
-  const room = rooms[roomId];
-  if (!room || room.players.length < 2) return;
-  room.round = 1;
-  room.scores = {};
-  runRound(roomId);
-}
-
-function runRound(roomId) {
-  const room = rooms[roomId];
-  if (!room) return;
-  room.phase = "submit";
-  room.entries = [];
-  room.votes = {};
-  room.acronym = createAcronym(room.round + 2);
-  emitToRoom(roomId, "round_number", room.round);
-  emitToRoom(roomId, "phase", room.phase);
-  emitToRoom(roomId, "acronym", room.acronym);
-  setTimeout(() => startVoting(roomId), 60000);
-}
-
-function startVoting(roomId) {
-  const room = rooms[roomId];
-  if (!room) return;
-  room.phase = "vote";
-  emitToRoom(roomId, "phase", "vote");
-  const shuffled = [...room.entries].sort(() => Math.random() - 0.5);
-  emitToRoom(roomId, "entries", shuffled);
-  setTimeout(() => showResults(roomId), 30000);
-}
-
-function showResults(roomId) {
-  const room = rooms[roomId];
-  if (!room) return;
-  room.phase = "results";
-  const voteCounts = {};
-  for (const [user, entryId] of Object.entries(room.votes)) {
-    voteCounts[entryId] = (voteCounts[entryId] || 0) + 1;
-  }
-  emitToRoom(roomId, "votes", voteCounts);
-  emitToRoom(roomId, "phase", "results");
-  if (room.round < MAX_ROUNDS) {
-    room.round++;
-    setTimeout(() => runRound(roomId), 10000);
-  } else {
-    emitToRoom(roomId, "phase", "game_over");
-  }
-}
 
 async function initDb() {
   await pool.query(`
@@ -282,6 +308,7 @@ async function initDb() {
 initDb();
 
 server.listen(3001, () => console.log("✅ Unified Acrophobia backend with full gameplay running on port 3001"));
+
 
 
 
