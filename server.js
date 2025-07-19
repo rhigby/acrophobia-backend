@@ -131,9 +131,12 @@ function runRound(roomId) {
   room.entries = [];
   room.votes = {};
   room.acronym = createAcronym(room.round + 2);
+  room.roundStartTime = Date.now();
   emitToRoom(roomId, "round_number", room.round);
   emitToRoom(roomId, "phase", room.phase);
   emitToRoom(roomId, "acronym", room.acronym);
+  emitToRoom(roomId, "letter_beep");
+  setTimeout(() => emitToRoom(roomId, "acronym_ready"), 2000);
   setTimeout(() => startVoting(roomId), 60000);
 }
 
@@ -152,13 +155,28 @@ function showResults(roomId) {
   if (!room) return;
   room.phase = "results";
   const voteCounts = {};
+  const voteTimestamps = [];
   for (const [user, entryId] of Object.entries(room.votes)) {
     voteCounts[entryId] = (voteCounts[entryId] || 0) + 1;
+    const entry = room.entries.find((e) => e.id === entryId);
+    if (entry) {
+      voteTimestamps.push({ id: entryId, username: entry.username, time: (entry.elapsed || 0) / 1000 });
+    }
   }
+  const sortedEntries = room.entries.sort((a, b) => voteCounts[b.id] - voteCounts[a.id]);
+  const winner = sortedEntries[0]?.id;
+  const fastest = [...room.entries].sort((a, b) => a.elapsed - b.elapsed)[0]?.id;
+  const votersForWinner = Object.entries(room.votes)
+    .filter(([_, entryId]) => entryId === winner)
+    .map(([voter]) => voter);
   emitToRoom(roomId, "votes", voteCounts);
   emitToRoom(roomId, "phase", "results");
+  emitToRoom(roomId, "highlight_results", { winner, fastest, voters: votersForWinner });
+  emitToRoom(roomId, "results_metadata", { timestamps: voteTimestamps });
+
   if (room.round < MAX_ROUNDS) {
     room.round++;
+    emitToRoom(roomId, "phase", "next_round_overlay");
     setTimeout(() => runRound(roomId), 10000);
   } else {
     emitToRoom(roomId, "phase", "game_over");
@@ -231,15 +249,11 @@ io.on("connection", (socket) => {
   socket.on("submit_entry", ({ room, username, text }) => {
     const roomData = rooms[room];
     if (!roomData) return;
-
     if (roomData.entries.find(e => e.username === username)) return;
-
     const id = `${Date.now()}-${Math.random()}`;
     const elapsed = Date.now() - roomData.roundStartTime;
     const entry = { id, username, text, time: Date.now(), elapsed };
-
     roomData.entries.push(entry);
-
     const submittedUsernames = roomData.entries.map(e => e.username);
     emitToRoom(room, "submitted_users", submittedUsernames);
     socket.emit("entry_submitted", { id, text });
@@ -254,6 +268,28 @@ io.on("connection", (socket) => {
     roomData.votes[username] = entryId;
     socket.emit("vote_confirmed", entryId);
     io.to(room).emit("votes", roomData.votes);
+  });
+
+  socket.on("private_message", ({ to, message }) => {
+    const from = socket.data.username;
+    const toSocketId = userSockets.get(to);
+    if (toSocketId) {
+      io.to(toSocketId).emit("private_message", { from, to, text: message });
+      socket.emit("private_message_ack", { from, to, text: message });
+    }
+  });
+
+  socket.on("leave_room", () => {
+    const room = socket.data.room;
+    const username = socket.data.username;
+    if (room && rooms[room]) {
+      rooms[room].players = rooms[room].players.filter((p) => p.username !== username);
+      socket.leave(room);
+      emitToRoom(room, "players", rooms[room].players);
+      if (rooms[room].players.length === 0) {
+        delete rooms[room];
+      }
+    }
   });
 
   socket.on("disconnect", () => {
@@ -308,6 +344,7 @@ async function initDb() {
 initDb();
 
 server.listen(3001, () => console.log("✅ Unified Acrophobia backend with full gameplay running on port 3001"));
+
 
 
 
