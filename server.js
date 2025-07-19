@@ -67,7 +67,27 @@ app.use(cookieParser());
 app.use(sessionMiddleware);
 app.use(express.json());
 
-// API Routes
+// Game utilities
+function createAcronym(length) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  return Array.from({ length }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
+}
+function emitToRoom(roomId, event, data) {
+  io.to(roomId).emit(event, data);
+}
+
+function getRoomStats() {
+  const stats = {};
+  for (const roomName in rooms) {
+    stats[roomName] = {
+      players: rooms[roomName].players.length,
+      round: rooms[roomName].round || 0,
+    };
+  }
+  return stats;
+}
+
+// API routes
 app.get("/api/me", (req, res) => {
   if (req.session?.username) {
     res.json({ username: req.session.username });
@@ -86,52 +106,7 @@ app.post("/api/login-cookie", (req, res) => {
   });
 });
 
-app.get("/api/messages", async (req, res) => {
-  const result = await pool.query("SELECT * FROM messages ORDER BY timestamp DESC");
-  const messages = result.rows;
-  const topLevel = messages.filter(m => !m.reply_to);
-  const repliesMap = {};
-  for (const m of messages) {
-    if (m.reply_to) {
-      if (!repliesMap[m.reply_to]) repliesMap[m.reply_to] = [];
-      repliesMap[m.reply_to].push(m);
-    }
-  }
-  const attachReplies = msg => ({ ...msg, replies: repliesMap[msg.id] || [] });
-  res.json(topLevel.map(attachReplies));
-});
-
-app.post("/api/messages", async (req, res) => {
-  const { title, content, replyTo } = req.body;
-  const username = req.session?.username || "Guest";
-  const result = await pool.query(
-    `INSERT INTO messages (title, content, username, reply_to) VALUES ($1, $2, $3, $4) RETURNING *`,
-    [title, content, username, replyTo || null]
-  );
-  const msg = result.rows[0];
-  io.emit("new_message", msg);
-  res.status(201).json({ success: true });
-});
-
-app.put("/api/messages/:id", async (req, res) => {
-  const { id } = req.params;
-  const { title, content } = req.body;
-  await pool.query("UPDATE messages SET title = $1, content = $2 WHERE id = $3", [title, content, id]);
-  res.json({ success: true });
-});
-
-app.delete("/api/messages/:id", async (req, res) => {
-  const { id } = req.params;
-  await pool.query("DELETE FROM messages WHERE id = $1", [id]);
-  res.json({ success: true });
-});
-
-app.post("/api/messages/:id/like", async (req, res) => {
-  const { id } = req.params;
-  await pool.query("UPDATE messages SET likes = COALESCE(likes, 0) + 1 WHERE id = $1", [id]);
-  res.json({ success: true });
-});
-
+// Socket setup
 const io = new Server(server, {
   cors: {
     origin: safeOriginCheck,
@@ -155,10 +130,123 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("login_cookie", ({ username }, callback) => {
+    if (!username) return callback({ success: false });
+    socket.request.session.username = username;
+    socket.request.session.save();
+    socket.data.username = username;
+    userSockets.set(username, socket.id);
+    activeUsers.set(username, "lobby");
+    userRooms[username] = "lobby";
+    io.emit("active_users", Array.from(activeUsers.entries()).map(([u, r]) => ({ username: u, room: r })));
+    callback({ success: true });
+  });
+
+  socket.on("join_room", ({ room }, callback) => {
+    const session = socket.request.session;
+    const username = session?.username;
+    if (!username) return callback?.({ success: false, message: "Unauthorized – not logged in" });
+
+    if (!rooms[room]) {
+      rooms[room] = {
+        players: [],
+        scores: {},
+        phase: "waiting",
+        round: 0,
+        entries: [],
+        votes: {},
+        acronym: ""
+      };
+    }
+
+    const r = rooms[room];
+    if (r.players.find(p => p.username === username)) {
+      return callback?.({ success: false, message: "User already in room" });
+    }
+
+    if (r.players.length >= MAX_PLAYERS) {
+      return callback?.({ success: false, message: "Room is full" });
+    }
+
+    socket.join(room);
+    socket.data.room = room;
+    socket.data.username = username;
+    r.players.push({ id: socket.id, username });
+
+    emitToRoom(room, "players", r.players);
+    callback?.({ success: true });
+
+    if (r.players.length >= 2 && r.phase === "waiting") {
+      startGame(room);
+    }
+  });
+
   socket.on("disconnect", () => {
-    console.log("Socket disconnected:", socket.id);
+    const username = socket.data?.username;
+    if (username) {
+      userSockets.delete(username);
+      activeUsers.set(username, "lobby");
+    }
+    const room = socket.data?.room;
+    if (room && rooms[room]) {
+      rooms[room].players = rooms[room].players.filter((p) => p.id !== socket.id);
+      emitToRoom(room, "players", rooms[room].players);
+      if (rooms[room].players.length === 0) {
+        delete rooms[room];
+      }
+    }
+    io.emit("active_users", Array.from(activeUsers.entries()).map(([u, r]) => ({ username: u, room: r })));
   });
 });
+
+function startGame(roomId) {
+  const room = rooms[roomId];
+  if (!room || room.players.length < 2) return;
+  room.round = 1;
+  room.scores = {};
+  runRound(roomId);
+}
+
+function runRound(roomId) {
+  const room = rooms[roomId];
+  if (!room) return;
+  room.phase = "submit";
+  room.entries = [];
+  room.votes = {};
+  room.acronym = createAcronym(room.round + 2);
+  emitToRoom(roomId, "round_number", room.round);
+  emitToRoom(roomId, "phase", room.phase);
+  emitToRoom(roomId, "acronym", room.acronym);
+  setTimeout(() => startVoting(roomId), 60000);
+}
+
+function startVoting(roomId) {
+  const room = rooms[roomId];
+  if (!room) return;
+  room.phase = "vote";
+  emitToRoom(roomId, "phase", "vote");
+  const shuffled = [...room.entries].sort(() => Math.random() - 0.5);
+  emitToRoom(roomId, "entries", shuffled);
+  setTimeout(() => showResults(roomId), 30000);
+}
+
+function showResults(roomId) {
+  const room = rooms[roomId];
+  if (!room) return;
+  room.phase = "results";
+  const voteCounts = {};
+  for (const [user, entryId] of Object.entries(room.votes)) {
+    voteCounts[entryId] = (voteCounts[entryId] || 0) + 1;
+  }
+  emitToRoom(roomId, "votes", voteCounts);
+  emitToRoom(roomId, "phase", "results");
+  if (room.round < MAX_ROUNDS) {
+    room.round++;
+    setTimeout(() => runRound(roomId), 10000);
+  } else {
+    emitToRoom(roomId, "phase", "game_over");
+  }
+}
 
 async function initDb() {
   await pool.query(`
@@ -172,7 +260,6 @@ async function initDb() {
       likes INTEGER DEFAULT 0
     );
   `);
-
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       username TEXT PRIMARY KEY,
@@ -180,7 +267,6 @@ async function initDb() {
       password TEXT NOT NULL
     );
   `);
-
   await pool.query(`
     CREATE TABLE IF NOT EXISTS user_stats (
       username TEXT PRIMARY KEY REFERENCES users(username),
@@ -195,7 +281,8 @@ async function initDb() {
 
 initDb();
 
-server.listen(3001, () => console.log("✅ Unified Acrophobia backend running on port 3001"));
+server.listen(3001, () => console.log("✅ Unified Acrophobia backend with full gameplay running on port 3001"));
+
 
 
 
