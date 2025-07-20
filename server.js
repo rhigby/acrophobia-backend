@@ -47,6 +47,51 @@ const allowedOrigins = [
   "http://localhost:5173"
 ];
 
+// A debug middleware to inspect session on every request
+app.use((req, res, next) => {
+  console.log("SESSION (via middleware):", req.session);
+  next();
+});
+
+// Login route
+app.post("/api/login", async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: "Missing credentials" });
+
+  try {
+    const result = await pool.query("SELECT * FROM users WHERE username = $1", [username]);
+    if (result.rows.length === 0) return res.status(401).json({ error: "Invalid login" });
+
+    const user = result.rows[0];
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) return res.status(401).json({ error: "Invalid password" });
+
+    req.session.username = username;
+    req.session.save(err => {
+      if (err) {
+        console.error("Session save error:", err);
+        return res.status(500).json({ error: "Session save failed" });
+      }
+      console.log("✅ Login successful. Session saved:", req.session);
+      res.json({ success: true });
+    });
+  } catch (err) {
+    console.error("Login error:", err);
+    res.status(500).json({ error: "Login failed" });
+  }
+});
+
+// Check current login
+app.get("/api/me", (req, res) => {
+  console.log("/api/me session check:", req.session);
+  if (req.session?.username) {
+    return res.json({ username: req.session.username });
+  } else {
+    return res.status(401).json({ error: "Not logged in" });
+  }
+});
+
+
 const app = express();
 const server = http.createServer(app);
 app.get("/api/set-cookie", (req, res) => {
