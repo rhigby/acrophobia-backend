@@ -79,11 +79,19 @@ const io = new Server(server, {
 io.use((socket, next) => sessionMiddleware(socket.request, {}, next));
 
 app.get("/api/me", (req, res) => {
+  console.log("SESSION CHECK:", req.session);
   if (req.session?.username) {
     return res.json({ username: req.session.username });
   } else {
     return res.status(401).json({ error: "Not logged in" });
   }
+});
+
+app.get("/api/debug-session", (req, res) => {
+  res.json({
+    username: req.session.username || null,
+    cookie: req.headers.cookie || "no cookie header",
+  });
 });
 
 app.post("/api/login", async (req, res) => {
