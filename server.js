@@ -43,6 +43,7 @@ const allowedOrigins = [
   "https://acrophobia-play.onrender.com",
   "https://acrophobia-bhnj.onrender.com",
   "https://acrophobia-frontend.onrender.com",
+   "https://acrophobia-backend-2.onrender.com/api/me",
   "http://localhost:5173"
 ];
 
