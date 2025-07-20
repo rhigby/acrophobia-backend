@@ -193,7 +193,7 @@ app.get("/api/stats", async (req, res) => {
       gamesToday: parseInt(gamesTodayRes.rows[0].count, 10),
       roomsLive,
       top10Daily: top10Daily.rows,
-      top10Weekly: top10Daily.rows // placeholder until weekly logic is added
+      top10Weekly: top10Daily.rows
     });
   } catch (err) {
     console.error("Failed to fetch stats:", err);
@@ -205,82 +205,80 @@ io.on("connection", (socket) => {
   const req = socket.request;
   const username = req.session?.username;
 
-  // Don't disconnect immediately — let the frontend call "check_session"
-  socket.on("check_session", (callback) => {
-    const user = socket.request.session?.username;
-    if (user) {
-      activeUsers.set(user, socket.id);
-      userSockets.set(socket.id, user);
-      callback({ authenticated: true, username: user });
-      broadcastUsers();
-    } else {
-      callback({ authenticated: false });
+  if (!username) {
+    console.warn("Unauthenticated socket connection attempt.");
+    socket.emit("unauthorized");
+    return;
+  }
+
+  activeUsers.set(username, socket.id);
+  userSockets.set(socket.id, username);
+
+  const broadcastUsers = () => {
+    const users = [...activeUsers.keys()].map(u => ({ username: u, room: userRooms[u] || null }));
+    io.emit("active_users", users);
+  };
+
+  broadcastUsers();
+
+  socket.on("join_room", ({ room }) => {
+    if (rooms[room]?.length >= MAX_PLAYERS) {
+      socket.emit("room_full");
+      return;
     }
+    socket.join(room);
+    userRooms[username] = room;
+    if (!rooms[room]) rooms[room] = [];
+    if (!rooms[room].includes(username)) {
+      rooms[room].push(username);
+    }
+    io.to(room).emit("players", rooms[room].map(name => ({ username: name })));
+    broadcastUsers();
   });
 
-  // Move all other logic inside a wrapper:
-  socket.on("authenticated", (username) => {
-    userSockets.set(socket.id, username);
-    activeUsers.set(username, socket.id);
-
-    // Now allow room joining, messaging, etc...
-    socket.on("join_room", ({ room }) => {
-      if (rooms[room]?.length >= MAX_PLAYERS) {
-        socket.emit("room_full");
-        return;
-      }
-      socket.join(room);
-      userRooms[username] = room;
-      if (!rooms[room]) rooms[room] = [];
-      if (!rooms[room].includes(username)) {
-        rooms[room].push(username);
-      }
+  socket.on("leave_room", () => {
+    const room = userRooms[username];
+    if (room && rooms[room]) {
+      rooms[room] = rooms[room].filter(u => u !== username);
       io.to(room).emit("players", rooms[room].map(name => ({ username: name })));
-      broadcastUsers();
-    });
+    }
+    delete userRooms[username];
+    socket.leave(room);
+    broadcastUsers();
+  });
 
-    socket.on("leave_room", () => {
-      const room = userRooms[username];
-      if (room && rooms[room]) {
-        rooms[room] = rooms[room].filter(u => u !== username);
-        io.to(room).emit("players", rooms[room].map(name => ({ username: name })));
-        delete userRooms[username];
-        socket.leave(room);
-        broadcastUsers();
-      }
-    });
+  socket.on("chat_message", ({ room, text }) => {
+    io.to(room).emit("chat_message", { username, text });
+  });
 
-    socket.on("chat_message", ({ room, text }) => {
-      io.to(room).emit("chat_message", { username, text });
-    });
+  socket.on("private_message", ({ to, message }) => {
+    if (!username) return;
+    const targetSocketId = activeUsers.get(to);
+    const payload = { from: username, to, text: message };
+    if (targetSocketId) {
+      io.to(targetSocketId).emit("private_message", payload);
+    }
+    socket.emit("private_message_ack", payload);
+  });
 
-    socket.on("private_message", ({ to, message }) => {
-      const targetSocketId = activeUsers.get(to);
-      if (targetSocketId) {
-        io.to(targetSocketId).emit("private_message", { from: username, to, text: message });
-        socket.emit("private_message_ack", { from: username, to, text: message });
-      }
-    });
-
-    socket.on("disconnect", () => {
-      activeUsers.delete(username);
-      userSockets.delete(socket.id);
-      const room = userRooms[username];
-      if (room && rooms[room]) {
-        rooms[room] = rooms[room].filter(u => u !== username);
-        io.to(room).emit("players", rooms[room].map(name => ({ username: name })));
-        delete userRooms[username];
-      }
-      broadcastUsers();
-    });
+  socket.on("disconnect", () => {
+    activeUsers.delete(username);
+    userSockets.delete(socket.id);
+    const room = userRooms[username];
+    if (room && rooms[room]) {
+      rooms[room] = rooms[room].filter(u => u !== username);
+      io.to(room).emit("players", rooms[room].map(name => ({ username: name })));
+    }
+    delete userRooms[username];
+    broadcastUsers();
   });
 });
-
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
 });
+
 
 
 
