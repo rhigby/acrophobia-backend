@@ -49,7 +49,10 @@ const allowedOrigins = [
 
 const app = express();
 const server = http.createServer(app);
-
+app.get("/api/set-cookie", (req, res) => {
+  req.session.username = "testuser";
+  req.session.save(() => res.json({ success: true }));
+});
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (allowedOrigins.includes(origin)) {
