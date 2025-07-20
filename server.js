@@ -15,6 +15,7 @@ const userSockets = new Map();
 const userRooms = {};
 const rooms = {};
 const MAX_PLAYERS = 10;
+const MAX_ROUNDS = 5;
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -57,10 +58,7 @@ app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(cookieParser());
 app.use(sessionMiddleware);
 app.use(express.json());
-
-io.use((socket, next) => {
-  sessionMiddleware(socket.request, {}, next);
-});
+io.use((socket, next) => sessionMiddleware(socket.request, {}, next));
 
 app.get("/api/me", (req, res) => {
   if (req.session?.username) {
@@ -90,10 +88,7 @@ app.post("/api/register", async (req, res) => {
   if (!username || !email || !password) return res.status(400).json({ error: "Missing fields" });
   try {
     const hash = await bcrypt.hash(password, 10);
-    await pool.query(
-      "INSERT INTO users (username, email, password) VALUES ($1, $2, $3)",
-      [username, email, hash]
-    );
+    await pool.query("INSERT INTO users (username, email, password) VALUES ($1, $2, $3)", [username, email, hash]);
     await pool.query("INSERT INTO user_stats (username) VALUES ($1)", [username]);
     req.session.username = username;
     req.session.save(err => {
@@ -120,22 +115,15 @@ app.get("/api/messages", async (req, res) => {
   try {
     const result = await pool.query(`SELECT * FROM messages ORDER BY timestamp DESC`);
     const allMessages = result.rows;
-
     const topLevel = allMessages.filter(m => !m.reply_to);
     const repliesMap = {};
-
     for (const msg of allMessages) {
       if (msg.reply_to) {
         if (!repliesMap[msg.reply_to]) repliesMap[msg.reply_to] = [];
         repliesMap[msg.reply_to].push(msg);
       }
     }
-
-    const attachReplies = (msg) => ({
-      ...msg,
-      replies: repliesMap[msg.id] || []
-    });
-
+    const attachReplies = (msg) => ({ ...msg, replies: repliesMap[msg.id] || [] });
     res.json(topLevel.map(attachReplies));
   } catch (err) {
     console.error("Failed to fetch messages:", err);
@@ -146,19 +134,12 @@ app.get("/api/messages", async (req, res) => {
 app.post("/api/messages", async (req, res) => {
   const username = req.session?.username || "Guest";
   const { title, content, replyTo = null } = req.body;
-
-  if (!title || !content) {
-    return res.status(400).json({ error: "Missing fields" });
-  }
-
+  if (!title || !content) return res.status(400).json({ error: "Missing fields" });
   try {
     const result = await pool.query(
-      `INSERT INTO messages (title, content, username, reply_to) 
-       VALUES ($1, $2, $3, $4) 
-       RETURNING id, timestamp`,
+      `INSERT INTO messages (title, content, username, reply_to) VALUES ($1, $2, $3, $4) RETURNING id, timestamp`,
       [title, content, username, replyTo]
     );
-
     const message = {
       id: result.rows[0].id,
       title,
@@ -167,7 +148,6 @@ app.post("/api/messages", async (req, res) => {
       timestamp: result.rows[0].timestamp,
       reply_to: replyTo
     };
-
     io.emit("new_message", message);
     res.status(201).json({ success: true });
   } catch (err) {
@@ -179,15 +159,9 @@ app.post("/api/messages", async (req, res) => {
 app.get("/api/stats", async (req, res) => {
   try {
     const totalPlayersRes = await pool.query("SELECT COUNT(*) FROM users");
-    const gamesTodayRes = await pool.query(
-      `SELECT COUNT(*) FROM user_stats WHERE CURRENT_DATE = CURRENT_DATE`
-    );
-    const top10Daily = await pool.query(
-      `SELECT username, total_points FROM user_stats ORDER BY total_points DESC LIMIT 10`
-    );
-
+    const gamesTodayRes = await pool.query(`SELECT COUNT(*) FROM user_stats WHERE CURRENT_DATE = CURRENT_DATE`);
+    const top10Daily = await pool.query(`SELECT username, total_points FROM user_stats ORDER BY total_points DESC LIMIT 10`);
     const roomsLive = Object.keys(rooms).length;
-
     res.json({
       totalPlayers: parseInt(totalPlayersRes.rows[0].count, 10),
       gamesToday: parseInt(gamesTodayRes.rows[0].count, 10),
@@ -201,105 +175,15 @@ app.get("/api/stats", async (req, res) => {
   }
 });
 
-// ✅ Merge full gameplay logic here (to be added below if needed)
-
-// --- Socket.IO Gameplay Handlers ---
-io.on("connection", (socket) => {
-  const session = socket.request.session;
-  const username = session?.username;
-  socket.data.username = username;
-
-  if (username) {
-    userSockets.set(username, socket.id);
-    activeUsers.set(username, "lobby");
-    userRooms[username] = "lobby";
-  }
-
-  io.emit("active_users", getActiveUserList());
-
-  socket.on("chat_message", ({ room, username, text }) => {
-    io.to(room).emit("chat_message", { username, text });
-  });
-
-  socket.on("private_message", ({ to, message }) => {
-    const from = socket.data?.username;
-    if (!from || !to || !message) return;
-    const recipientSocketId = userSockets.get(to);
-    const payload = { from, to, text: message, private: true };
-    if (recipientSocketId) io.to(recipientSocketId).emit("private_message", payload);
-    socket.emit("private_message_ack", payload);
-  });
-
-  socket.on("join_room", ({ room }, callback) => {
-    const username = socket.data?.username;
-    if (!username) return callback({ success: false });
-
-    if (!rooms[room]) {
-      rooms[room] = {
-        players: [],
-        scores: {},
-        phase: "waiting",
-        round: 0,
-        entries: [],
-        votes: {},
-        acronym: ""
-      };
-    }
-
-    const r = rooms[room];
-    if (r.players.length >= MAX_PLAYERS) return callback({ success: false, message: "Room is full" });
-    if (r.players.find(p => p.username === username)) return callback({ success: false });
-
-    socket.join(room);
-    socket.data.room = room;
-    r.players.push({ id: socket.id, username });
-
-    io.to(room).emit("players", r.players);
-    callback({ success: true });
-  });
-
-  socket.on("submit_entry", ({ room, username, text }) => {
-    const roomData = rooms[room];
-    if (!roomData || roomData.entries.find(e => e.username === username)) return;
-    const id = `${Date.now()}-${Math.random()}`;
-    const elapsed = Date.now() - roomData.roundStartTime;
-    const entry = { id, username, text, time: Date.now(), elapsed };
-    roomData.entries.push(entry);
-    io.to(room).emit("submitted_users", roomData.entries.map(e => e.username));
-    socket.emit("entry_submitted", { id, text });
-  });
-
-  socket.on("vote_entry", ({ room, username, entryId }) => {
-    const roomData = rooms[room];
-    if (!roomData) return;
-    const entry = roomData.entries.find(e => e.id === entryId);
-    if (!entry || entry.username === username) return;
-    roomData.votes[username] = entryId;
-    socket.emit("vote_confirmed", entryId);
-    io.to(room).emit("votes", roomData.votes);
-  });
-
-  socket.on("disconnect", () => {
-    const username = socket.data?.username;
-    if (username) {
-      userSockets.delete(username);
-      activeUsers.delete(username);
-      delete userRooms[username];
-    }
-    io.emit("active_users", getActiveUserList());
-  });
-});
-
-function getActiveUserList() {
-  return Array.from(activeUsers.entries()).map(([username, room]) => ({ username, room }));
-}
-
-// See prior saved working game backend and integrate
+// ✅ Full gameplay logic merged:
+const { wireGameLogic } = require("./game-logic");
+wireGameLogic(io, pool, activeUsers, userSockets, userRooms, rooms);
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
 });
+
 
 
 
