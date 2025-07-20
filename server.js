@@ -48,14 +48,20 @@ const allowedOrigins = [
 const app = express();
 const server = http.createServer(app);
 
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
+
 app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error("Not allowed by CORS"));
-    }
-  },
+  origin: allowedOrigins,
   credentials: true
 }));
 
@@ -65,13 +71,7 @@ app.use(express.json());
 
 const io = new Server(server, {
   cors: {
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
+    origin: allowedOrigins,
     credentials: true
   }
 });
@@ -79,19 +79,11 @@ const io = new Server(server, {
 io.use((socket, next) => sessionMiddleware(socket.request, {}, next));
 
 app.get("/api/me", (req, res) => {
-  console.log("SESSION CHECK:", req.session);
   if (req.session?.username) {
     return res.json({ username: req.session.username });
   } else {
     return res.status(401).json({ error: "Not logged in" });
   }
-});
-
-app.get("/api/debug-session", (req, res) => {
-  res.json({
-    username: req.session.username || null,
-    cookie: req.headers.cookie || "no cookie header",
-  });
 });
 
 app.post("/api/login", async (req, res) => {
@@ -209,6 +201,7 @@ const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
 });
+
 
 
 
