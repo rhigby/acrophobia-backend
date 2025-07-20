@@ -204,71 +204,78 @@ app.get("/api/stats", async (req, res) => {
 io.on("connection", (socket) => {
   const req = socket.request;
   const username = req.session?.username;
-  if (!username) return socket.disconnect(true);
 
-  activeUsers.set(username, socket.id);
-  userSockets.set(socket.id, username);
-
-  const broadcastUsers = () => {
-    const users = [...activeUsers.keys()].map(u => ({ username: u, room: userRooms[u] || null }));
-    io.emit("active_users", users);
-  };
-
-  broadcastUsers();
-
-  socket.on("join_room", ({ room, username }) => {
-    if (rooms[room]?.length >= MAX_PLAYERS) {
-      socket.emit("room_full");
-      return;
+  // Don't disconnect immediately — let the frontend call "check_session"
+  socket.on("check_session", (callback) => {
+    const user = socket.request.session?.username;
+    if (user) {
+      activeUsers.set(user, socket.id);
+      userSockets.set(socket.id, user);
+      callback({ authenticated: true, username: user });
+      broadcastUsers();
+    } else {
+      callback({ authenticated: false });
     }
-    socket.join(room);
-    userRooms[username] = room;
-    if (!rooms[room]) rooms[room] = [];
-    if (!rooms[room].includes(username)) {
-      rooms[room].push(username);
-    }
-    io.to(room).emit("players", rooms[room].map(name => ({ username: name })));
-    broadcastUsers();
   });
 
-  socket.on("leave_room", () => {
-    const username = userSockets.get(socket.id);
-    const room = userRooms[username];
-    if (room && rooms[room]) {
-      rooms[room] = rooms[room].filter(u => u !== username);
+  // Move all other logic inside a wrapper:
+  socket.on("authenticated", (username) => {
+    userSockets.set(socket.id, username);
+    activeUsers.set(username, socket.id);
+
+    // Now allow room joining, messaging, etc...
+    socket.on("join_room", ({ room }) => {
+      if (rooms[room]?.length >= MAX_PLAYERS) {
+        socket.emit("room_full");
+        return;
+      }
+      socket.join(room);
+      userRooms[username] = room;
+      if (!rooms[room]) rooms[room] = [];
+      if (!rooms[room].includes(username)) {
+        rooms[room].push(username);
+      }
       io.to(room).emit("players", rooms[room].map(name => ({ username: name })));
-    }
-    delete userRooms[username];
-    socket.leave(room);
-    broadcastUsers();
-  });
+      broadcastUsers();
+    });
 
-  socket.on("chat_message", ({ room, username, text }) => {
-    io.to(room).emit("chat_message", { username, text });
-  });
+    socket.on("leave_room", () => {
+      const room = userRooms[username];
+      if (room && rooms[room]) {
+        rooms[room] = rooms[room].filter(u => u !== username);
+        io.to(room).emit("players", rooms[room].map(name => ({ username: name })));
+        delete userRooms[username];
+        socket.leave(room);
+        broadcastUsers();
+      }
+    });
 
-  socket.on("private_message", ({ to, message }) => {
-    const from = userSockets.get(socket.id);
-    const targetSocketId = activeUsers.get(to);
-    if (targetSocketId) {
-      io.to(targetSocketId).emit("private_message", { from, to, text: message });
-      socket.emit("private_message_ack", { from, to, text: message });
-    }
-  });
+    socket.on("chat_message", ({ room, text }) => {
+      io.to(room).emit("chat_message", { username, text });
+    });
 
-  socket.on("disconnect", () => {
-    const username = userSockets.get(socket.id);
-    activeUsers.delete(username);
-    userSockets.delete(socket.id);
-    const room = userRooms[username];
-    if (room && rooms[room]) {
-      rooms[room] = rooms[room].filter(u => u !== username);
-      io.to(room).emit("players", rooms[room].map(name => ({ username: name })));
-    }
-    delete userRooms[username];
-    broadcastUsers();
+    socket.on("private_message", ({ to, message }) => {
+      const targetSocketId = activeUsers.get(to);
+      if (targetSocketId) {
+        io.to(targetSocketId).emit("private_message", { from: username, to, text: message });
+        socket.emit("private_message_ack", { from: username, to, text: message });
+      }
+    });
+
+    socket.on("disconnect", () => {
+      activeUsers.delete(username);
+      userSockets.delete(socket.id);
+      const room = userRooms[username];
+      if (room && rooms[room]) {
+        rooms[room] = rooms[room].filter(u => u !== username);
+        io.to(room).emit("players", rooms[room].map(name => ({ username: name })));
+        delete userRooms[username];
+      }
+      broadcastUsers();
+    });
   });
 });
+
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
