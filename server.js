@@ -82,7 +82,12 @@ app.post("/api/login", async (req, res) => {
     res.json({ success: true });
   });
 });
-
+app.get("/debug-session", (req, res) => {
+  res.json({
+    session: req.session,
+    cookie: req.headers.cookie
+  });
+});
 app.post("/api/register", async (req, res) => {
   const { username, email, password } = req.body;
   if (!username || !email || !password) return res.status(400).json({ error: "Missing fields" });
