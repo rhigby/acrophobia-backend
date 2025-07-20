@@ -201,74 +201,100 @@ app.get("/api/stats", async (req, res) => {
   }
 });
 
+// ✅ Merge full gameplay logic here (to be added below if needed)
+
+// --- Socket.IO Gameplay Handlers ---
 io.on("connection", (socket) => {
-  const req = socket.request;
-  const username = req.session?.username || null;
+  const session = socket.request.session;
+  const username = session?.username;
+  socket.data.username = username;
 
   if (username) {
-    activeUsers.set(username, socket.id);
-    userSockets.set(socket.id, username);
+    userSockets.set(username, socket.id);
+    activeUsers.set(username, "lobby");
+    userRooms[username] = "lobby";
   }
 
-  const broadcastUsers = () => {
-    const users = [...activeUsers.keys()].map(u => ({ username: u, room: userRooms[u] || null }));
-    io.emit("active_users", users);
-  };
+  io.emit("active_users", getActiveUserList());
 
-  broadcastUsers();
-
-  socket.on("join_room", ({ room }) => {
-    if (rooms[room]?.length >= MAX_PLAYERS) {
-      socket.emit("room_full");
-      return;
-    }
-    socket.join(room);
-    userRooms[username] = room;
-    if (!rooms[room]) rooms[room] = [];
-    if (!rooms[room].includes(username)) {
-      rooms[room].push(username);
-    }
-    io.to(room).emit("players", rooms[room].map(name => ({ username: name })));
-    broadcastUsers();
-  });
-
-  socket.on("leave_room", () => {
-    const room = userRooms[username];
-    if (room && rooms[room]) {
-      rooms[room] = rooms[room].filter(u => u !== username);
-      io.to(room).emit("players", rooms[room].map(name => ({ username: name })));
-    }
-    delete userRooms[username];
-    socket.leave(room);
-    broadcastUsers();
-  });
-
-  socket.on("chat_message", ({ room, text }) => {
+  socket.on("chat_message", ({ room, username, text }) => {
     io.to(room).emit("chat_message", { username, text });
   });
 
   socket.on("private_message", ({ to, message }) => {
-    if (!username) return;
-    const targetSocketId = activeUsers.get(to);
-    const payload = { from: username, to, text: message };
-    if (targetSocketId) {
-      io.to(targetSocketId).emit("private_message", payload);
-    }
+    const from = socket.data?.username;
+    if (!from || !to || !message) return;
+    const recipientSocketId = userSockets.get(to);
+    const payload = { from, to, text: message, private: true };
+    if (recipientSocketId) io.to(recipientSocketId).emit("private_message", payload);
     socket.emit("private_message_ack", payload);
   });
 
-  socket.on("disconnect", () => {
-    activeUsers.delete(username);
-    userSockets.delete(socket.id);
-    const room = userRooms[username];
-    if (room && rooms[room]) {
-      rooms[room] = rooms[room].filter(u => u !== username);
-      io.to(room).emit("players", rooms[room].map(name => ({ username: name })));
+  socket.on("join_room", ({ room }, callback) => {
+    const username = socket.data?.username;
+    if (!username) return callback({ success: false });
+
+    if (!rooms[room]) {
+      rooms[room] = {
+        players: [],
+        scores: {},
+        phase: "waiting",
+        round: 0,
+        entries: [],
+        votes: {},
+        acronym: ""
+      };
     }
-    delete userRooms[username];
-    broadcastUsers();
+
+    const r = rooms[room];
+    if (r.players.length >= MAX_PLAYERS) return callback({ success: false, message: "Room is full" });
+    if (r.players.find(p => p.username === username)) return callback({ success: false });
+
+    socket.join(room);
+    socket.data.room = room;
+    r.players.push({ id: socket.id, username });
+
+    io.to(room).emit("players", r.players);
+    callback({ success: true });
+  });
+
+  socket.on("submit_entry", ({ room, username, text }) => {
+    const roomData = rooms[room];
+    if (!roomData || roomData.entries.find(e => e.username === username)) return;
+    const id = `${Date.now()}-${Math.random()}`;
+    const elapsed = Date.now() - roomData.roundStartTime;
+    const entry = { id, username, text, time: Date.now(), elapsed };
+    roomData.entries.push(entry);
+    io.to(room).emit("submitted_users", roomData.entries.map(e => e.username));
+    socket.emit("entry_submitted", { id, text });
+  });
+
+  socket.on("vote_entry", ({ room, username, entryId }) => {
+    const roomData = rooms[room];
+    if (!roomData) return;
+    const entry = roomData.entries.find(e => e.id === entryId);
+    if (!entry || entry.username === username) return;
+    roomData.votes[username] = entryId;
+    socket.emit("vote_confirmed", entryId);
+    io.to(room).emit("votes", roomData.votes);
+  });
+
+  socket.on("disconnect", () => {
+    const username = socket.data?.username;
+    if (username) {
+      userSockets.delete(username);
+      activeUsers.delete(username);
+      delete userRooms[username];
+    }
+    io.emit("active_users", getActiveUserList());
   });
 });
+
+function getActiveUserList() {
+  return Array.from(activeUsers.entries()).map(([username, room]) => ({ username, room }));
+}
+
+// See prior saved working game backend and integrate
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
