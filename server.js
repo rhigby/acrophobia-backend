@@ -42,6 +42,7 @@ const sessionMiddleware = session({
 const allowedOrigins = [
   "https://acrophobia-play.onrender.com",
   "https://acrophobia-bhnj.onrender.com",
+  "https://acrophobia-frontend.onrender.com",
   "http://localhost:5173"
 ];
 
