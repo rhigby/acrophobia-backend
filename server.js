@@ -53,6 +53,12 @@ app.get("/api/set-cookie", (req, res) => {
   req.session.username = "testuser";
   req.session.save(() => res.json({ success: true }));
 });
+app.get("/api/debug-session", (req, res) => {
+  res.json({
+    username: req.session.username || null,
+    cookie: req.headers.cookie || "no cookie header",
+  });
+});
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (allowedOrigins.includes(origin)) {
