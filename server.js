@@ -32,9 +32,9 @@ const sessionMiddleware = session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    sameSite: "none",
-    secure: true,
-    domain: ".onrender.com",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    secure: process.env.NODE_ENV === "production",
+    domain: process.env.NODE_ENV === "production" ? ".onrender.com" : undefined,
     path: "/"
   }
 });
@@ -47,17 +47,35 @@ const allowedOrigins = [
 
 const app = express();
 const server = http.createServer(app);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
+  credentials: true
+}));
+
+app.use(cookieParser());
+app.use(sessionMiddleware);
+app.use(express.json());
+
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins,
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true
   }
 });
 
-app.use(cors({ origin: allowedOrigins, credentials: true }));
-app.use(cookieParser());
-app.use(sessionMiddleware);
-app.use(express.json());
 io.use((socket, next) => sessionMiddleware(socket.request, {}, next));
 
 app.get("/api/me", (req, res) => {
@@ -82,12 +100,7 @@ app.post("/api/login", async (req, res) => {
     res.json({ success: true });
   });
 });
-app.get("/debug-session", (req, res) => {
-  res.json({
-    session: req.session,
-    cookie: req.headers.cookie
-  });
-});
+
 app.post("/api/register", async (req, res) => {
   const { username, email, password } = req.body;
   if (!username || !email || !password) return res.status(400).json({ error: "Missing fields" });
@@ -188,6 +201,7 @@ const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
 });
+
 
 
 
