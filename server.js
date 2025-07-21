@@ -29,7 +29,7 @@ const sessionMiddleware = session({
   cookie: {
     sameSite: "none",
     secure: true,
-    domain: ".onrender.com", // ✅ explicitly set domain for cross-subdomain cookies
+    domain: "https://acrophobia-play.onrender.com", // ✅ explicitly set domain for cross-subdomain cookies
     path: "/"
   }
 });
@@ -62,24 +62,18 @@ const allowedOrigins = [
   "http://localhost:5173"
 ];
 function safeOriginCheck(origin, callback) {
-  if (!origin) {
-    // Allow requests with no origin (like curl, Postman, or same-origin requests)
-    return callback(null, true);
-  }
-
+  if (!origin) return callback(null, true);
   try {
-    const parsedOrigin = new URL(origin).origin; // strips any path
+    const parsedOrigin = new URL(origin).origin;
     if (allowedOrigins.includes(parsedOrigin)) {
       callback(null, true);
     } else {
       callback(new Error("Not allowed by CORS"));
     }
   } catch (err) {
-    console.warn("Invalid origin format:", origin);
     callback(new Error("Invalid origin"));
   }
 }
-
 
 
 app.use((err, req, res, next) => {
