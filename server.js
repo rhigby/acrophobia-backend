@@ -89,6 +89,10 @@ app.use(sessionMiddleware);
 const messages = [];
 
 app.post("/api/messages", express.json(), async (req, res) => {
+  // ✅ Add CORS headers
+  res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+
   const username = req.session?.username || "Guest";
   const { title, content, replyTo = null } = req.body;
 
@@ -113,7 +117,7 @@ app.post("/api/messages", express.json(), async (req, res) => {
       reply_to: replyTo
     };
 
-    io.emit("new_message", message); // ✅ Push to all clients
+    io.emit("new_message", message); // ✅ Broadcast to clients
 
     res.status(201).json({ success: true });
   } catch (err) {
@@ -122,7 +126,11 @@ app.post("/api/messages", express.json(), async (req, res) => {
   }
 });
 
+
 app.get("/api/messages", async (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+
   try {
     const result = await pool.query(`SELECT * FROM messages ORDER BY timestamp DESC`);
     const allMessages = result.rows;
@@ -148,6 +156,7 @@ app.get("/api/messages", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch messages" });
   }
 });
+
 
 app.post("/api/login-cookie", express.json(), async (req, res) => {
   const { username } = req.body;
