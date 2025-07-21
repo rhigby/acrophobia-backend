@@ -46,7 +46,12 @@ const allowedOrigins = [
    "https://acrophobia-backend-2.onrender.com/api/me",
   "http://localhost:5173"
 ];
-
+const app = express();
+const server = http.createServer(app);
+app.get("/api/set-cookie", (req, res) => {
+  req.session.username = "testuser";
+  req.session.save(() => res.json({ success: true }));
+});
 // A debug middleware to inspect session on every request
 app.use((req, res, next) => {
   console.log("SESSION (via middleware):", req.session);
@@ -92,12 +97,7 @@ app.get("/api/me", (req, res) => {
 });
 
 
-const app = express();
-const server = http.createServer(app);
-app.get("/api/set-cookie", (req, res) => {
-  req.session.username = "testuser";
-  req.session.save(() => res.json({ success: true }));
-});
+
 app.get("/api/debug-session", (req, res) => {
   res.json({
     username: req.session.username || null,
