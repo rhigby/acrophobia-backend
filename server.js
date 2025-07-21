@@ -89,7 +89,6 @@ app.use(sessionMiddleware);
 const messages = [];
 
 app.post("/api/messages", express.json(), async (req, res) => {
-  // ✅ Add CORS headers
   res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
   res.setHeader("Access-Control-Allow-Credentials", "true");
 
@@ -114,17 +113,18 @@ app.post("/api/messages", express.json(), async (req, res) => {
       content,
       username,
       timestamp: result.rows[0].timestamp,
-      reply_to: replyTo
+      reply_to: replyTo,
+      replies: [] // ✅ Prevent frontend crashes
     };
 
-    io.emit("new_message", message); // ✅ Broadcast to clients
-
-    res.status(201).json({ success: true });
+    io.emit("new_message", message);
+    res.status(201).json(message); // ✅ Optimistic update ready
   } catch (err) {
     console.error("Failed to insert message:", err);
     res.status(500).json({ error: "Database insert failed" });
   }
 });
+
 
 
 app.get("/api/messages", async (req, res) => {
