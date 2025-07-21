@@ -54,7 +54,11 @@ app.get("/api/me", (req, res) => {
   }
 });
 
-
+app.get("/api/debug-session", (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.json({ username: req.session?.username || "Guest" });
+});
 
 const allowedOrigins = [
   "https://acrophobia-play.onrender.com",
