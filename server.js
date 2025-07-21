@@ -1,8 +1,8 @@
 // backend/server.js
 require("dotenv").config();
+const express = require("express");
 const session = require("express-session");
 const cookieParser = require("cookie-parser");
-const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
@@ -41,69 +41,14 @@ const sessionMiddleware = session({
 
 const allowedOrigins = [
   "https://acrophobia-play.onrender.com",
-  "https://acrophobia-bhnj.onrender.com",
   "https://acrophobia-frontend.onrender.com",
-   "https://acrophobia-backend-2.onrender.com/api/me",
+  "https://acrophobia-bhnj.onrender.com",
   "http://localhost:5173"
 ];
+
 const app = express();
 const server = http.createServer(app);
-app.get("/api/set-cookie", (req, res) => {
-  req.session.username = "testuser";
-  req.session.save(() => res.json({ success: true }));
-});
-// A debug middleware to inspect session on every request
-app.use((req, res, next) => {
-  console.log("SESSION (via middleware):", req.session);
-  next();
-});
 
-// Login route
-app.post("/api/login", async (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password) return res.status(400).json({ error: "Missing credentials" });
-
-  try {
-    const result = await pool.query("SELECT * FROM users WHERE username = $1", [username]);
-    if (result.rows.length === 0) return res.status(401).json({ error: "Invalid login" });
-
-    const user = result.rows[0];
-    const match = await bcrypt.compare(password, user.password);
-    if (!match) return res.status(401).json({ error: "Invalid password" });
-
-    req.session.username = username;
-    req.session.save(err => {
-      if (err) {
-        console.error("Session save error:", err);
-        return res.status(500).json({ error: "Session save failed" });
-      }
-      console.log("✅ Login successful. Session saved:", req.session);
-      res.json({ success: true });
-    });
-  } catch (err) {
-    console.error("Login error:", err);
-    res.status(500).json({ error: "Login failed" });
-  }
-});
-
-// Check current login
-app.get("/api/me", (req, res) => {
-  console.log("/api/me session check:", req.session);
-  if (req.session?.username) {
-    return res.json({ username: req.session.username });
-  } else {
-    return res.status(401).json({ error: "Not logged in" });
-  }
-});
-
-
-
-app.get("/api/debug-session", (req, res) => {
-  res.json({
-    username: req.session.username || null,
-    cookie: req.headers.cookie || "no cookie header",
-  });
-});
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (allowedOrigins.includes(origin)) {
@@ -134,6 +79,7 @@ const io = new Server(server, {
 
 io.use((socket, next) => sessionMiddleware(socket.request, {}, next));
 
+// Auth
 app.get("/api/me", (req, res) => {
   if (req.session?.username) {
     return res.json({ username: req.session.username });
@@ -175,16 +121,7 @@ app.post("/api/register", async (req, res) => {
   }
 });
 
-app.post("/api/login-cookie", (req, res) => {
-  const { username } = req.body;
-  if (!username) return res.status(400).json({ error: "Missing username" });
-  req.session.username = username;
-  req.session.save(err => {
-    if (err) return res.status(500).json({ error: "Failed to save session" });
-    res.json({ success: true });
-  });
-});
-
+// Message board
 app.get("/api/messages", async (req, res) => {
   try {
     const result = await pool.query(`SELECT * FROM messages ORDER BY timestamp DESC`);
@@ -230,6 +167,7 @@ app.post("/api/messages", async (req, res) => {
   }
 });
 
+// Stats
 app.get("/api/stats", async (req, res) => {
   try {
     const totalPlayersRes = await pool.query("SELECT COUNT(*) FROM users");
@@ -249,7 +187,7 @@ app.get("/api/stats", async (req, res) => {
   }
 });
 
-// ✅ Full gameplay logic merged:
+// Game logic
 const { wireGameLogic } = require("./game-logic");
 wireGameLogic(io, pool, activeUsers, userSockets, userRooms, rooms);
 
@@ -257,6 +195,7 @@ const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
 });
+
 
 
 
