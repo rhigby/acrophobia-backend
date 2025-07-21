@@ -27,11 +27,11 @@ const sessionMiddleware = session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    sameSite: "none",
-    secure: true,
-    domain: "https://acrophobia-play.onrender.com", // ✅ explicitly set domain for cross-subdomain cookies
-    path: "/"
-  }
+  sameSite: "none",
+  secure: true,
+  domain: ".onrender.com", // ✅ shared domain
+  path: "/"
+}
 });
 
 const app = express();
