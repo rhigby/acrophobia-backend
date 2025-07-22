@@ -451,14 +451,6 @@ function getRoomStats() {
   }
   return stats;
 }
-const extractUsernameFromSocket = (socket) => {
-  const rawCookie = socket.handshake.headers?.cookie || "";
-  const cookieParts = rawCookie.split("; ");
-  const userCookie = cookieParts.find((c) => c.startsWith("acrophobia_user="));
-  return userCookie ? decodeURIComponent(userCookie.split("=")[1]) : null;
-};
-
-
 
 // ✅ Middleware to extract username from cookie
 io.use((socket, next) => {
