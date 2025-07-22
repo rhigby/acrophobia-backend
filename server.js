@@ -47,11 +47,6 @@ app.get("/api/me", (req, res) => {
   }
 });
 
-app.get("/api/debug-session", (req, res) => {
-  res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
-  res.setHeader("Access-Control-Allow-Credentials", "true");
-  res.json({ username: req.session?.username || "Guest" });
-});
 
 const allowedOrigins = [
   "https://acrophobia-play.onrender.com",
@@ -467,7 +462,34 @@ const extractUsernameFromSocket = (socket) => {
   const userCookie = cookieParts.find((c) => c.startsWith("acrophobia_user="));
   return userCookie ? decodeURIComponent(userCookie.split("=")[1]) : null;
 };
+
+const httpServer = require("http").createServer(app);
+const io = require("socket.io")(httpServer, {
+  cors: {
+    origin: "https://acrophobia-play.onrender.com",
+    credentials: true
+  }
+});
+
+// ✅ Middleware to extract username from cookie
+io.use((socket, next) => {
+  const cookieHeader = socket.handshake.headers.cookie;
+  if (!cookieHeader) return next();
+  const cookies = Object.fromEntries(
+    cookieHeader.split(";").map(c => {
+      const [key, ...v] = c.trim().split("=");
+      return [key, decodeURIComponent(v.join("="))];
+    })
+  );
+  const username = cookies.acrophobia_user;
+  if (username) {
+    socket.data.username = username;
+  }
+  next();
+});
+
 io.on("connection", (socket) => {
+  console.log("Socket connected:", socket.id, "user:", socket.data.username);
    socket.on("check_session", (callback) => {
     const username = extractUsernameFromSocket(socket);
     if (username) {
@@ -586,9 +608,11 @@ io.on("connection", (socket) => {
 });
 
 
-  socket.on("chat_message", ({ room, username, text }) => {
-    io.to(room).emit("chat_message", { username, text });
-  });
+socket.on("chat_message", ({ room, text }) => {
+  const username = socket.data?.username;
+  if (!username || !text || !room) return;
+  io.to(room).emit("chat_message", { username, text });
+});
 
   socket.on("join_room", ({ room }, callback) => {
   io.emit("room_list", getRoomStats());
