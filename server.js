@@ -13,7 +13,13 @@ const { Pool } = require("pg");
 
 const userSockets = new Map();
 const app = express();
-
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "https://acrophobia-play.onrender.com",
+    credentials: true
+  }
+});
 app.use(cors({
   origin: "https://acrophobia-play.onrender.com",
   credentials: true
@@ -177,17 +183,6 @@ app.get("/api/stats", async (req, res) => {
   } catch (err) {
     console.error("Failed to fetch stats:", err);
     res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-// ✅ Create the HTTP server BEFORE passing it to Socket.IO
-const server = http.createServer(app);
-
-const io = new Server(server, {
-  cors: {
-    origin: safeOriginCheck,
-    methods: ["GET", "POST"],
-    credentials: true
   }
 });
 
@@ -463,13 +458,7 @@ const extractUsernameFromSocket = (socket) => {
   return userCookie ? decodeURIComponent(userCookie.split("=")[1]) : null;
 };
 
-const httpServer = require("http").createServer(app);
-const io = require("socket.io")(httpServer, {
-  cors: {
-    origin: "https://acrophobia-play.onrender.com",
-    credentials: true
-  }
-});
+
 
 // ✅ Middleware to extract username from cookie
 io.use((socket, next) => {
