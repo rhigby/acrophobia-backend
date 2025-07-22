@@ -12,6 +12,12 @@ const cors = require("cors");
 const { Pool } = require("pg");
 const pgSession = require("connect-pg-simple")(session);
 const userSockets = new Map();
+const app = express();
+
+app.use(cors({
+  origin: "https://acrophobia-play.onrender.com",
+  credentials: true
+}));
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -36,8 +42,6 @@ const sessionMiddleware = session({
   }
 });
 
-
-const app = express();
 app.options("*", cors({
   origin: [
     "https://acrophobia-bhnj.onrender.com",
