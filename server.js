@@ -1,6 +1,6 @@
 // backend/server.js
 require("dotenv").config();
-const session = require("express-session");
+
 const cookieParser = require("cookie-parser");
 const express = require("express");
 const activeUsers = new Map();
@@ -10,7 +10,7 @@ const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
 const { Pool } = require("pg");
-const pgSession = require("connect-pg-simple")(session);
+
 const userSockets = new Map();
 const app = express();
 
@@ -24,24 +24,6 @@ const pool = new Pool({
   ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false
 });
 
-const sessionMiddleware = session({
-  store: new pgSession({
-    pool: pool,
-    tableName: "session",
-    createTableIfMissing: true
-  }),
-  secret: process.env.SESSION_SECRET || "acrophobia-secret", // use env var if possible
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: true,                  // ✅ Required for SameSite=None
-    sameSite: "none",              // ✅ Allow cross-origin requests
-    domain: ".onrender.com",       // ✅ Match all Render subdomains
-    path: "/",                     // ✅ Required for default use
-    maxAge: 1000 * 60 * 60 * 24 * 7 // 7 days (optional)
-  }
-});
-
 app.options("*", cors({
   origin: [
     "https://acrophobia-bhnj.onrender.com",
@@ -51,34 +33,18 @@ app.options("*", cors({
 }));
 
 app.use(cookieParser());
-app.use(sessionMiddleware);
+app.use(express.json());
 
 app.get("/api/me", (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
   res.setHeader("Access-Control-Allow-Credentials", "true");
 
-  if (req.session?.user) {
-    res.json(req.session.user);
+  const username = req.cookies?.acrophobia_user;
+  if (username) {
+    res.json({ username });
   } else {
     res.status(401).json({ error: "Not logged in" });
   }
-});
-
-app.post("/api/login-cookie", express.json(), async (req, res) => {
-  const { username } = req.body;
-  if (!username) return res.status(400).json({ error: "Missing username" });
-
-  req.session.username = username;
-
-  req.session.save(err => {
-    if (err) {
-      console.error("Failed to save session:", err);
-      return res.status(500).json({ error: "Failed to set session" });
-    }
-
-    console.log("✅ Session saved:", req.session);
-    res.status(200).json({ success: true });
-  });
 });
 
 app.get("/api/debug-session", (req, res) => {
@@ -119,7 +85,7 @@ app.post("/api/messages", express.json(), async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
   res.setHeader("Access-Control-Allow-Credentials", "true");
 
-  const username = req.session?.username || "Guest";
+ const username = req.cookies?.acrophobia_user || "Guest";
   const { title, content, replyTo = null } = req.body;
 
   if (!title || !content) {
@@ -228,12 +194,6 @@ const io = new Server(server, {
     methods: ["GET", "POST"],
     credentials: true
   }
-});
-
-io.engine.use(sessionMiddleware); 
-// 1. First attach the session middleware
-io.use((socket, next) => {
-  sessionMiddleware(socket.request, {}, next);
 });
 
 async function initDb() {
@@ -501,216 +461,224 @@ function getRoomStats() {
   }
   return stats;
 }
-
+const extractUsernameFromSocket = (socket) => {
+  const rawCookie = socket.handshake.headers?.cookie || "";
+  const cookieParts = rawCookie.split("; ");
+  const userCookie = cookieParts.find((c) => c.startsWith("acrophobia_user="));
+  return userCookie ? decodeURIComponent(userCookie.split("=")[1]) : null;
+};
 io.on("connection", (socket) => {
-  socket.on("check_session", (callback) => {
-    const session = socket.request.session;
-    if (session && session.username) {
-      callback({ authenticated: true, username: session.username });
+   socket.on("check_session", (callback) => {
+    const username = extractUsernameFromSocket(socket);
+    if (username) {
+      callback({ authenticated: true, username });
     } else {
       callback({ authenticated: false });
-    }
-  });
-
-  socket.on("login_cookie", ({ username }, callback) => {
-    if (!username) return callback({ success: false });
-
-    try {
-      socket.request.session.username = username;
-      socket.request.session.save();
-      socket.data.username = username;
-
-      userSockets.set(username, socket.id);
-      activeUsers.set(username, "lobby");
-      userRooms[username] = "lobby";
-
-      io.emit("active_users", getActiveUserList());
-      callback({ success: true });
-    } catch (err) {
-      console.error("login_cookie error:", err);
-      callback({ success: false, message: "Server error during session login" });
     }
   });
 
   console.log("User connected:", socket.id);
 
   socket.on("login", async ({ username, password }, callback) => {
-    if (!username || !password) {
-      return callback({ success: false, message: "Missing credentials" });
+  if (!username || !password) {
+    return callback({ success: false, message: "Missing credentials" });
+  }
+
+  try {
+    const userResult = await pool.query(
+      `SELECT * FROM users WHERE username = $1 AND password = $2`,
+      [username, password]
+    );
+
+    if (userResult.rows.length === 0) {
+      return callback({ success: false, message: "Invalid credentials" });
     }
 
-    try {
-      const userResult = await pool.query(
-        `SELECT * FROM users WHERE username = $1 AND password = $2`,
-        [username, password]
-      );
+    // ✅ Set in-memory reference
+    socket.data.username = username;
+    userSockets.set(username, socket.id);
+    activeUsers.set(username, "lobby");
+    userRooms[username] = "lobby";
 
-      if (userResult.rows.length === 0) {
-        return callback({ success: false, message: "Invalid credentials" });
-      }
+    // ✅ Notify all users of new login
+    io.emit("active_users", getActiveUserList());
 
-      socket.request.session.username = username;
-      socket.request.session.save();
-      socket.data.username = username;
+    // ✅ Send confirmation to client
+    callback({ success: true });
 
-      userSockets.set(username, socket.id);
-      activeUsers.set(username, "lobby");
-      userRooms[username] = "lobby";
+    // Optionally send stats after login
+    const statsRes = await pool.query(
+      `SELECT * FROM user_stats WHERE username = $1`,
+      [username]
+    );
 
-      io.emit("active_users", getActiveUserList());
-      callback({ success: true });
-
-      const statsRes = await pool.query(
-        `SELECT * FROM user_stats WHERE username = $1`,
-        [username]
-      );
-
-      if (statsRes.rows.length > 0) {
-        socket.emit("user_stats", statsRes.rows[0]);
-      }
-    } catch (err) {
-      console.error("Login error:", err);
-      callback({ success: false, message: "Server error during login" });
+    if (statsRes.rows.length > 0) {
+      socket.emit("user_stats", statsRes.rows[0]);
     }
-  });
+  } catch (err) {
+    console.error("Login error:", err);
+    callback({ success: false, message: "Server error during login" });
+  }
+});
+
 
   socket.on("register", async ({ username, email, password }, callback) => {
-    try {
-      const userCheck = await pool.query(
-        `SELECT * FROM users WHERE username = $1 OR email = $2`,
-        [username, email]
-      );
+  try {
+    // Check if username or email already exists
+    const userCheck = await pool.query(
+      `SELECT * FROM users WHERE username = $1 OR email = $2`,
+      [username, email]
+    );
 
-      if (userCheck.rows.length > 0) {
-        return callback({ success: false, message: "Username or email already exists" });
-      }
-
-      await pool.query(
-        `INSERT INTO users (username, email, password) VALUES ($1, $2, $3)`,
-        [username, email, password]
-      );
-
-      await pool.query(`INSERT INTO user_stats (username) VALUES ($1)`, [username]);
-
-      socket.request.session.username = username;
-      socket.request.session.save();
-      activeUsers.set(username, "lobby");
-      callback({ success: true });
-    } catch (err) {
-      console.error("Registration error:", err);
-      callback({ success: false, message: "Server error" });
+    if (userCheck.rows.length > 0) {
+      return callback({ success: false, message: "Username or email already exists" });
     }
-  });
+
+    // Insert new user
+    await pool.query(
+      `INSERT INTO users (username, email, password) VALUES ($1, $2, $3)`,
+      [username, email, password]
+    );
+
+    // Create initial stats
+    await pool.query(`INSERT INTO user_stats (username) VALUES ($1)`, [username]);
+
+    // ✅ Set in-memory identity for socket
+    socket.data.username = username;
+    userSockets.set(username, socket.id);
+    activeUsers.set(username, "lobby");
+    userRooms[username] = "lobby";
+
+    // Broadcast active users list
+    io.emit("active_users", getActiveUserList());
+
+    // Return success
+    callback({ success: true });
+  } catch (err) {
+    console.error("Registration error:", err);
+    callback({ success: false, message: "Server error" });
+  }
+});
+
 
   socket.on("private_message", ({ to, message }) => {
-    const from = socket.data?.username;
-    if (!from || !to || !message) return;
+  const from = socket.data?.username;
+  if (!from || !to || !message) {
+    console.warn("❌ Missing fields in private_message:", { from, to, message });
+    return;
+  }
 
-    const recipientSocketId = userSockets.get(to);
+  const recipientSocketId = userSockets.get(to);
 
-    const payload = {
-      from,
-      to,
-      text: message,
-      private: true
-    };
+  const payload = {
+    from,
+    to,
+    text: message,
+    private: true
+  };
 
-    if (recipientSocketId) {
-      io.to(recipientSocketId).emit("private_message", payload);
-    }
+  if (recipientSocketId) {
+    io.to(recipientSocketId).emit("private_message", payload);
+    socket.emit("private_message_ack", payload); // ✅ Acknowledge only if delivered
+  } else {
+    console.warn(`⚠️ Recipient ${to} not online.`);
+  }
+});
 
-    // ✅ Only emit back to sender if recipient exists
-    socket.emit("private_message_ack", payload);
-  });
 
   socket.on("chat_message", ({ room, username, text }) => {
     io.to(room).emit("chat_message", { username, text });
   });
 
   socket.on("join_room", ({ room }, callback) => {
-    io.emit("room_list", getRoomStats());
-    const session = socket.request.session;
-    const username = session?.username;
+  io.emit("room_list", getRoomStats());
 
-    activeUsers.set(username, room);
-    io.emit("active_users", getActiveUserList());
+  const username = socket.data?.username;
+  if (!username) {
+    return callback?.({ success: false, message: "Unauthorized – not logged in" });
+  }
 
-    if (!username) {
-      return callback?.({ success: false, message: "Unauthorized – not logged in" });
-    }
+  activeUsers.set(username, room);
+  io.emit("active_users", getActiveUserList());
 
-    if (!rooms[room]) {
-      rooms[room] = {
-        players: [],
-        scores: {},
-        phase: "waiting",
-        round: 0,
-        entries: [],
-        votes: {},
-        acronym: ""
-      };
-    }
+  if (!rooms[room]) {
+    rooms[room] = {
+      players: [],
+      scores: {},
+      phase: "waiting",
+      round: 0,
+      entries: [],
+      votes: {},
+      acronym: ""
+    };
+  }
 
-    const r = rooms[room];
+  const r = rooms[room];
 
-    if (r.players.find(p => p.username === username)) {
-      return callback?.({ success: false, message: "User already in room" });
-    }
+  if (r.players.find(p => p.username === username)) {
+    return callback?.({ success: false, message: "User already in room" });
+  }
 
-    if (r.players.length >= MAX_PLAYERS) {
-      return callback?.({ success: false, message: "Room is full" });
-    }
+  if (r.players.length >= MAX_PLAYERS) {
+    return callback?.({ success: false, message: "Room is full" });
+  }
 
-    socket.join(room);
-    socket.data.room = room;
-    socket.data.username = username;
+  socket.join(room);
+  socket.data.room = room;
 
-    r.players.push({ id: socket.id, username });
+  r.players.push({ id: socket.id, username });
 
-    emitToRoom(room, "players", r.players);
+  emitToRoom(room, "players", r.players);
 
-    if (r.players.length >= 2 && r.phase === "waiting") {
-      startGame(room);
-    }
+  if (r.players.length >= 2 && r.phase === "waiting") {
+    startGame(room);
+  }
 
-    callback?.({ success: true });
-  });
+  callback?.({ success: true });
+});
 
-  socket.on("submit_entry", ({ room, username, text }) => {
-    const roomData = rooms[room];
-    if (!roomData) return;
 
-    if (roomData.entries.find(e => e.username === username)) return;
+  socket.on("submit_entry", ({ room, text }) => {
+  const roomData = rooms[room];
+  if (!roomData) return;
 
-    const id = `${Date.now()}-${Math.random()}`;
-    const elapsed = Date.now() - roomData.roundStartTime;
-    const entry = { id, username, text, time: Date.now(), elapsed };
+  const username = socket.data?.username;
+  if (!username || roomData.entries.find(e => e.username === username)) return;
 
-    roomData.entries.push(entry);
+  const id = `${Date.now()}-${Math.random()}`;
+  const elapsed = Date.now() - roomData.roundStartTime;
+  const entry = { id, username, text, time: Date.now(), elapsed };
 
-    const submittedUsernames = roomData.entries.map(e => e.username);
-    emitToRoom(room, "submitted_users", submittedUsernames);
+  roomData.entries.push(entry);
 
-    socket.emit("entry_submitted", { id, text });
-    io.to(room).emit("entries", roomData.entries);
-  });
+  const submittedUsernames = roomData.entries.map(e => e.username);
+  emitToRoom(room, "submitted_users", submittedUsernames);
 
-  socket.on("vote_entry", ({ room, username, entryId }) => {
-    const roomData = rooms[room];
-    if (!roomData) return;
+  socket.emit("entry_submitted", { id, text });
+  io.to(room).emit("entries", roomData.entries);
+});
 
-    const entry = roomData.entries.find(e => e.id === entryId);
-    if (!entry) return;
 
-    if (entry.username === username) {
-      socket.emit("error_message", "You cannot vote for your own entry.");
-      return;
-    }
+  socket.on("vote_entry", ({ room, entryId }) => {
+  const roomData = rooms[room];
+  if (!roomData) return;
 
-    roomData.votes[username] = entryId;
-    socket.emit("vote_confirmed", entryId);
-    io.to(room).emit("votes", roomData.votes);
-  });
+  const username = socket.data?.username;
+  if (!username) return;
+
+  const entry = roomData.entries.find(e => e.id === entryId);
+  if (!entry) return;
+
+  if (entry.username === username) {
+    socket.emit("error_message", "You cannot vote for your own entry.");
+    return;
+  }
+
+  roomData.votes[username] = entryId;
+  socket.emit("vote_confirmed", entryId);
+  io.to(room).emit("votes", roomData.votes);
+});
+
 
 socket.on("leave_room", () => {
     const room = socket.data?.room;
