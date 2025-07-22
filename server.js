@@ -42,9 +42,6 @@ app.use(cookieParser());
 app.use(express.json());
 
 app.get("/api/me", (req, res) => {
-  res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
-  res.setHeader("Access-Control-Allow-Credentials", "true");
-
   const username = req.cookies?.acrophobia_user;
   if (username) {
     res.json({ username });
@@ -52,7 +49,6 @@ app.get("/api/me", (req, res) => {
     res.status(401).json({ error: "Not logged in" });
   }
 });
-
 
 const allowedOrigins = [
   "https://acrophobia-play.onrender.com",
@@ -73,18 +69,9 @@ function safeOriginCheck(origin, callback) {
   }
 }
 
-
-app.use((err, req, res, next) => {
-  res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
-  res.header("Access-Control-Allow-Credentials", "true");
-  next(err);
-});
-
 const messages = [];
 
 app.post("/api/messages", express.json(), async (req, res) => {
-  res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
-  res.setHeader("Access-Control-Allow-Credentials", "true");
 
  const username = req.cookies?.acrophobia_user || "Guest";
   const { title, content, replyTo = null } = req.body;
@@ -122,9 +109,6 @@ app.post("/api/messages", express.json(), async (req, res) => {
 
 
 app.get("/api/messages", async (req, res) => {
-  res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
-  res.setHeader("Access-Control-Allow-Credentials", "true");
-
   try {
     const result = await pool.query(`SELECT * FROM messages ORDER BY timestamp DESC`);
     const allMessages = result.rows;
