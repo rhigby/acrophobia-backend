@@ -43,6 +43,9 @@ app.options("*", cors({
   credentials: true
 }));
 
+app.use(cookieParser());
+app.use(sessionMiddleware);
+
 app.get("/api/me", (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
   res.setHeader("Access-Control-Allow-Credentials", "true");
@@ -52,6 +55,23 @@ app.get("/api/me", (req, res) => {
   } else {
     res.status(401).json({ error: "Not logged in" });
   }
+});
+
+app.post("/api/login-cookie", express.json(), async (req, res) => {
+  const { username } = req.body;
+  if (!username) return res.status(400).json({ error: "Missing username" });
+
+  req.session.username = username;
+
+  req.session.save(err => {
+    if (err) {
+      console.error("Failed to save session:", err);
+      return res.status(500).json({ error: "Failed to set session" });
+    }
+
+    console.log("✅ Session saved:", req.session);
+    res.status(200).json({ success: true });
+  });
 });
 
 app.get("/api/debug-session", (req, res) => {
@@ -85,10 +105,6 @@ app.use((err, req, res, next) => {
   res.header("Access-Control-Allow-Credentials", "true");
   next(err);
 });
-
-
-app.use(cookieParser());
-app.use(sessionMiddleware);
 
 const messages = [];
 
@@ -160,25 +176,6 @@ app.get("/api/messages", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch messages" });
   }
 });
-
-
-app.post("/api/login-cookie", express.json(), async (req, res) => {
-  const { username } = req.body;
-  if (!username) return res.status(400).json({ error: "Missing username" });
-
-  req.session.username = username;
-
-  req.session.save(err => {
-    if (err) {
-      console.error("Failed to save session:", err);
-      return res.status(500).json({ error: "Failed to set session" });
-    }
-
-    console.log("✅ Session set in /api/login-cookie:", req.session); // <— ADD THIS
-
-    res.status(200).json({ success: true });
-  });
-})
 
 app.get("/api/stats", async (req, res) => {
   try {
