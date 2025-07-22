@@ -437,6 +437,7 @@ function getRoomStats() {
 // ✅ Middleware to extract username from cookie
 io.use((socket, next) => {
   const cookieHeader = socket.handshake.headers.cookie;
+  console.log("Cookie header:", socket.handshake.headers.cookie);
   if (!cookieHeader) return next();
   const cookies = Object.fromEntries(
     cookieHeader.split(";").map(c => {
