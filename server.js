@@ -53,6 +53,10 @@ app.get("/api/me", (req, res) => {
   }
 });
 
+socket.on("whoami", (cb) => {
+  const username = socket.data?.username;
+  cb({ username });
+});
 
 const allowedOrigins = [
   "https://acrophobia-play.onrender.com",
