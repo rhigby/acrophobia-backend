@@ -72,8 +72,8 @@ function safeOriginCheck(origin, callback) {
 const messages = [];
 
 app.post("/api/messages", express.json(), async (req, res) => {
-
- const username = req.cookies?.acrophobia_user || "Guest";
+  const username = req.cookies?.acrophobia_user || "Guest";
+   console.error("Failed to insert message:", username);
   const { title, content, replyTo = null } = req.body;
 
   if (!title || !content) {
@@ -95,18 +95,16 @@ app.post("/api/messages", express.json(), async (req, res) => {
       username,
       timestamp: result.rows[0].timestamp,
       reply_to: replyTo,
-      replies: [] // ✅ Prevent frontend crashes
+      replies: []
     };
 
     io.emit("new_message", message);
-    res.status(201).json(message); // ✅ Optimistic update ready
+    res.status(201).json(message);
   } catch (err) {
     console.error("Failed to insert message:", err);
     res.status(500).json({ error: "Database insert failed" });
   }
 });
-
-
 
 app.get("/api/messages", async (req, res) => {
   try {
