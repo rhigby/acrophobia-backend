@@ -72,7 +72,7 @@ function safeOriginCheck(origin, callback) {
 const messages = [];
 
 app.post("/api/messages", express.json(), async (req, res) => {
-  const username = req.cookies?.acrophobia_user || "Guest";
+ const username = req.body.username || "Guest";
    console.error("Failed to insert message:", username);
   const { title, content, replyTo = null } = req.body;
 
