@@ -17,22 +17,25 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false
 });
+
 const sessionMiddleware = session({
   store: new pgSession({
     pool: pool,
-    tableName: 'session',
+    tableName: "session",
     createTableIfMissing: true
   }),
-  secret: "secret-key",
+  secret: process.env.SESSION_SECRET || "acrophobia-secret", // use env var if possible
   resave: false,
   saveUninitialized: false,
   cookie: {
-  sameSite: "none",
-  secure: true,
-  domain: ".onrender.com", // ✅ shared domain
-  path: "/"
-}
+    secure: true,                  // ✅ Required for SameSite=None
+    sameSite: "none",              // ✅ Allow cross-origin requests
+    domain: ".onrender.com",       // ✅ Match all Render subdomains
+    path: "/",                     // ✅ Required for default use
+    maxAge: 1000 * 60 * 60 * 24 * 7 // 7 days (optional)
+  }
 });
+
 
 const app = express();
 app.options("*", cors({
