@@ -472,6 +472,7 @@ io.on("connection", (socket) => {
 
 
   socket.on("login", async ({ username, password }, callback) => {
+     console.log("📩 Login event received:", username, password);
   if (!username || !password) {
     return callback({ success: false, message: "Missing credentials" });
   }
