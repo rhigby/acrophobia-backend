@@ -69,6 +69,7 @@ function safeOriginCheck(origin, callback) {
   }
 }
 app.post("/api/update-profile", express.json(), async (req, res) => {
+  console.log("Cookies received:", req.cookies);
   const username = req.cookies?.acrophobia_user;
   const { email, password } = req.body;
 
