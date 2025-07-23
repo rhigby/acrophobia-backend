@@ -19,10 +19,6 @@ const io = new Server(server, {
     credentials: true
   }
 });
-app.use(cors({
-  origin: "https://acrophobia-play.onrender.com",
-  credentials: true
-}));
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
