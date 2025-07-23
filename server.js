@@ -1,7 +1,6 @@
 // backend/server.js
 require("dotenv").config();
 
-const cookieParser = require("cookie-parser");
 const express = require("express");
 const activeUsers = new Map();
 const userRooms = {}; // Track each user's current room
@@ -10,7 +9,7 @@ const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
 const { Pool } = require("pg");
-
+const { v4: uuidv4 } = require("uuid");
 const userSockets = new Map();
 const app = express();
 const server = http.createServer(app);
@@ -47,16 +46,17 @@ app.use(cors({
 }));
 
 
-app.use(cookieParser());
 app.use(express.json());
 
-app.get("/api/me", (req, res) => {
-  const username = req.cookies?.acrophobia_user;
-  if (username) {
-    res.json({ username });
-  } else {
-    res.status(401).json({ error: "Not logged in" });
-  }
+app.get("/api/me", async (req, res) => {
+  const auth = req.headers.authorization;
+  const token = auth?.split(" ")[1];
+  if (!token) return res.status(401).json({ error: "Missing token" });
+
+  const result = await pool.query(`SELECT username FROM sessions WHERE token = $1`, [token]);
+  if (result.rows.length === 0) return res.status(401).json({ error: "Invalid token" });
+
+  res.json({ username: result.rows[0].username });
 });
 
 function safeOriginCheck(origin, callback) {
@@ -72,24 +72,36 @@ function safeOriginCheck(origin, callback) {
     callback(new Error("Invalid origin"));
   }
 }
+
+app.post("/api/login-token", express.json(), async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: "Missing credentials" });
+
+  const result = await pool.query(`SELECT * FROM users WHERE username = $1 AND password = $2`, [username, password]);
+  if (result.rows.length === 0) return res.status(401).json({ error: "Invalid credentials" });
+
+  const token = uuidv4();
+  await pool.query(`INSERT INTO sessions (token, username) VALUES ($1, $2)`, [token, username]);
+
+  res.json({ success: true, token });
+});
+
 app.post("/api/update-profile", express.json(), async (req, res) => {
-  console.log("Cookies received:", req.cookies);
-  const username = req.cookies?.acrophobia_user;
+  const auth = req.headers.authorization;
+  const token = auth?.split(" ")[1];
   const { email, password } = req.body;
 
-  if (!username) return res.status(401).json({ error: "Not logged in" });
+  if (!token) return res.status(401).json({ error: "Missing token" });
 
-  try {
-    await pool.query(
-      `UPDATE users SET email = $1, password = $2 WHERE username = $3`,
-      [email, password, username]
-    );
-    res.json({ success: true });
-  } catch (err) {
-    console.error("Update failed:", err);
-    res.status(500).json({ error: "Update failed" });
-  }
+  const result = await pool.query(`SELECT username FROM sessions WHERE token = $1`, [token]);
+  if (result.rows.length === 0) return res.status(401).json({ error: "Invalid token" });
+
+  const username = result.rows[0].username;
+  await pool.query(`UPDATE users SET email = $1, password = $2 WHERE username = $3`, [email, password, username]);
+
+  res.json({ success: true });
 });
+
 
 const messages = [];
 
@@ -220,6 +232,14 @@ async function initDb() {
     reply_to INTEGER REFERENCES messages(id) ON DELETE CASCADE
   );
 `);
+  await pool.query(`
+  CREATE TABLE IF NOT EXISTS sessions (
+    token TEXT PRIMARY KEY,
+    username TEXT REFERENCES users(username),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  );
+`);
+
 }
 
 initDb().catch(console.error);
@@ -456,23 +476,38 @@ function getRoomStats() {
   return stats;
 }
 
-// ✅ Middleware to extract username from cookie
-io.use((socket, next) => {
-  const cookieHeader = socket.handshake.headers.cookie;
-  console.log("Cookie header:", socket.handshake.headers.cookie);
-  if (!cookieHeader) return next();
-  const cookies = Object.fromEntries(
-    cookieHeader.split(";").map(c => {
-      const [key, ...v] = c.trim().split("=");
-      return [key, decodeURIComponent(v.join("="))];
-    })
-  );
-  const username = cookies.acrophobia_user;
-  if (username) {
-    socket.data.username = username;
+io.use(async (socket, next) => {
+  const token = socket.handshake.auth?.token;
+  if (!token) return next();
+  
+  try {
+    const result = await pool.query(`SELECT username FROM sessions WHERE token = $1`, [token]);
+    if (result.rows.length) {
+      socket.data.username = result.rows[0].username;
+    }
+    next();
+  } catch (err) {
+    next(err);
   }
-  next();
 });
+
+// ✅ Middleware to extract username from cookie
+// io.use((socket, next) => {
+//   const cookieHeader = socket.handshake.headers.cookie;
+//   console.log("Cookie header:", socket.handshake.headers.cookie);
+//   if (!cookieHeader) return next();
+//   const cookies = Object.fromEntries(
+//     cookieHeader.split(";").map(c => {
+//       const [key, ...v] = c.trim().split("=");
+//       return [key, decodeURIComponent(v.join("="))];
+//     })
+//   );
+//   const username = cookies.acrophobia_user;
+//   if (username) {
+//     socket.data.username = username;
+//   }
+//   next();
+// });
 
 io.on("connection", (socket) => {
   console.log("Socket connected:", socket.id, "user:", socket.data.username);
