@@ -68,6 +68,23 @@ function safeOriginCheck(origin, callback) {
     callback(new Error("Invalid origin"));
   }
 }
+app.post("/api/update-profile", express.json(), async (req, res) => {
+  const username = req.cookies?.acrophobia_user;
+  const { email, password } = req.body;
+
+  if (!username) return res.status(401).json({ error: "Not logged in" });
+
+  try {
+    await pool.query(
+      `UPDATE users SET email = $1, password = $2 WHERE username = $3`,
+      [email, password, username]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Update failed:", err);
+    res.status(500).json({ error: "Update failed" });
+  }
+});
 
 const messages = [];
 
