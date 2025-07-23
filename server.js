@@ -29,14 +29,23 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false
 });
+const allowedOrigins = [
+  "https://acrophobia-play.onrender.com",
+  "https://acrophobia-bhnj.onrender.com",
+  "http://localhost:5173"
+];
 
-app.options("*", cors({
-  origin: [
-    "https://acrophobia-bhnj.onrender.com",
-    "https://acrophobia-play.onrender.com"
-  ],
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
   credentials: true
 }));
+
 
 app.use(cookieParser());
 app.use(express.json());
