@@ -59,11 +59,6 @@ app.get("/api/me", (req, res) => {
   }
 });
 
-const allowedOrigins = [
-  "https://acrophobia-play.onrender.com",
-  "https://acrophobia-bhnj.onrender.com",
-  "http://localhost:5173"
-];
 function safeOriginCheck(origin, callback) {
   if (!origin) return callback(null, true);
   try {
