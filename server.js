@@ -15,7 +15,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "https://acrophobia-play.onrender.com",
+    origin: "https://acrophobia-play-now.onrender.com",
     credentials: true
   }
 });
@@ -25,7 +25,7 @@ const pool = new Pool({
   ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false
 });
 const allowedOrigins = [
-  "https://acrophobia-play.onrender.com",
+  "https://acrophobia-play-now.onrender.com",
   "https://acrophobia-bhnj.onrender.com",
   "http://localhost:5173"
 ];
