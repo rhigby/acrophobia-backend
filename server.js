@@ -764,30 +764,35 @@ socket.on("leave_room", () => {
   });
   
   socket.on("disconnect", () => {
-    const username = socket.data?.username;
-    if (username) {
-      userSockets.delete(username);
+  const username = socket.data?.username;
+  const room = socket.data?.room;
+
+  if (username) {
+    console.log(`👋 ${username} disconnected`);
+    userSockets.delete(username);
+    activeUsers.set(username, "lobby");
+    userRooms[username] = "lobby";
+  }
+
+  if (room && rooms[room]) {
+    // Remove the player from the room
+    rooms[room].players = rooms[room].players.filter((p) => p.id !== socket.id);
+
+    // Notify others in the room
+    emitToRoom(room, "players", rooms[room].players);
+
+    // If room is empty, clean it up
+    if (rooms[room].players.length === 0) {
+      console.log(`🧹 Room ${room} is now empty. Deleting room.`);
+      delete rooms[room];
+      delete roomRounds?.[room]; // safe optional chaining
     }
-    const room = socket.data?.room;
+  }
 
-    if (username) {
-      userRooms[username] = "lobby";
-      activeUsers.set(username, "lobby");
-    }
+  // Broadcast updated active user list to everyone
+  io.emit("active_users", getActiveUserList());
+});
 
-    if (room && rooms[room]) {
-      rooms[room].players = rooms[room].players.filter((p) => p.id !== socket.id);
-      emitToRoom(room, "players", rooms[room].players);
-
-      if (rooms[room].players.length === 0) {
-        console.log(`Room ${room} is now empty. Deleting room.`);
-        delete rooms[room];
-        delete roomRounds?.[room];
-      }
-    }
-
-    io.emit("active_users", getActiveUserList());
-  });
 });
 
 setInterval(() => {
