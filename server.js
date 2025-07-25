@@ -523,6 +523,15 @@ io.on("connection", (socket) => {
     cb({ username });
   });
 
+  socket.on("request_user_stats", async () => {
+    const username = socket.data?.username;
+    if (!username) return;
+    const statsRes = await pool.query(`SELECT * FROM user_stats WHERE username = $1`, [username]);
+    if (statsRes.rows.length > 0) {
+      socket.emit("user_stats", statsRes.rows[0]);
+    }
+  });
+
 
   socket.on("login", async ({ username, password }, callback) => {
      console.log("📩 Login event received:", username, password);
