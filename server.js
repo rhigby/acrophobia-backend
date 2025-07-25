@@ -616,20 +616,19 @@ io.on("connection", (socket) => {
 });
 
 
-  socket.on("private_message", ({ from, to, message }) => {
+  socket.on("private_message", ({ to, message }) => {
+  const from = socket.data?.username;
+  console.log("📩 Private message request:", { from, to, message });
+
   if (!from || !to || !message) {
     console.warn("❌ Missing fields in private_message:", { from, to, message });
     return;
   }
 
   const recipientSocketId = userSockets.get(to);
+  console.log("➡️ Sending to socket:", recipientSocketId);
 
-  const payload = {
-    from,
-    to,
-    text: message,
-    private: true
-  };
+  const payload = { from, to, text: message, private: true };
 
   if (recipientSocketId) {
     io.to(recipientSocketId).emit("private_message", payload);
@@ -638,6 +637,7 @@ io.on("connection", (socket) => {
     console.warn(`⚠️ Recipient ${to} not online.`);
   }
 });
+
 
 
 
