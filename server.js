@@ -475,17 +475,25 @@ function getRoomStats() {
 io.use(async (socket, next) => {
   const token = socket.handshake.auth?.token;
   if (!token) return next();
-  
+
   try {
     const result = await pool.query(`SELECT username FROM sessions WHERE token = $1`, [token]);
     if (result.rows.length) {
-      socket.data.username = result.rows[0].username;
+      const username = result.rows[0].username;
+
+      socket.data.username = username;
+
+      // ✅ Register user's socket ID for private messaging
+      userSockets.set(username, socket.id);
+      console.log(`✅ ${username} connected on socket ${socket.id}`);
     }
     next();
   } catch (err) {
+    console.error("❌ Error during socket authentication:", err);
     next(err);
   }
 });
+
 
 // ✅ Middleware to extract username from cookie
 // io.use((socket, next) => {
@@ -507,6 +515,11 @@ io.use(async (socket, next) => {
 
 io.on("connection", (socket) => {
   console.log("Socket connected:", socket.id, "user:", socket.data.username);
+  const username = socket.data?.username; // should be set from token/session
+  if (username) {
+    userSockets.set(username, socket.id); // ✅ register mapping
+    console.log(`✅ Registered ${username} to socket ${socket.id}`);
+  }
    socket.on("check_session", (callback) => {
     const username = extractUsernameFromSocket(socket);
     if (username) {
