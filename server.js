@@ -616,8 +616,7 @@ io.on("connection", (socket) => {
 });
 
 
-  socket.on("private_message", ({ to, message }) => {
-  const from = socket.data?.username;
+  socket.on("private_message", ({ from, to, message }) => {
   if (!from || !to || !message) {
     console.warn("❌ Missing fields in private_message:", { from, to, message });
     return;
@@ -634,11 +633,12 @@ io.on("connection", (socket) => {
 
   if (recipientSocketId) {
     io.to(recipientSocketId).emit("private_message", payload);
-    socket.emit("private_message_ack", payload); // ✅ Acknowledge only if delivered
+    socket.emit("private_message_ack", payload);
   } else {
     console.warn(`⚠️ Recipient ${to} not online.`);
   }
 });
+
 
 
 socket.on("chat_message", ({ room, text }) => {
