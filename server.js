@@ -140,43 +140,54 @@ app.get("/api/messages", async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT 
-        id, 
-        title, 
-        content, 
-        username, 
-        timestamp, 
-        reply_to AS "replyTo"  -- normalize column to match frontend
-      FROM messages 
+        id,
+        title,
+        content,
+        username,
+        timestamp,
+        reply_to AS "replyTo"
+      FROM messages
       ORDER BY timestamp ASC
     `);
 
     const allMessages = result.rows;
 
     const messageMap = {};
-    allMessages.forEach(msg => {
-      msg.replies = [];
-      messageMap[msg.id] = msg;
-    });
-
     const roots = [];
 
+    // First: build initial map with empty replies
+    for (const msg of allMessages) {
+      messageMap[msg.id] = { ...msg, replies: [] };
+    }
+
+    // Second: assign replies properly
     for (const msg of allMessages) {
       if (msg.replyTo && messageMap[msg.replyTo]) {
-        messageMap[msg.replyTo].replies.push(msg);
+        messageMap[msg.replyTo].replies.push(messageMap[msg.id]);
       } else {
-        roots.push(msg);
+        roots.push(messageMap[msg.id]);
       }
     }
 
-    // Optional: reverse top-level for newest-first sort
-    roots.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    // Recursive sort newest to oldest
+    function sortReplies(list) {
+      list.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      for (const item of list) {
+        if (item.replies?.length) {
+          sortReplies(item.replies);
+        }
+      }
+    }
+
+    sortReplies(roots);
 
     res.json(roots);
   } catch (err) {
-    console.error("Failed to fetch messages:", err);
+    console.error("❌ Failed to fetch messages:", err);
     res.status(500).json({ error: "Failed to fetch messages" });
   }
 });
+
 
 
 
