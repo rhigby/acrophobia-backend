@@ -133,10 +133,9 @@ app.get("/api/messages", async (req, res) => {
     const result = await pool.query(`SELECT * FROM messages ORDER BY timestamp ASC`);
     const allMessages = result.rows.map((msg) => ({
       ...msg,
-      replyTo: msg.reply_to,  // normalize for frontend
+      replyTo: msg.reply_to ?? null, // normalize key
     }));
-
-    res.json(allMessages);  // ✅ send flat list
+    res.json(allMessages); // ✅ flat list
   } catch (err) {
     console.error("Failed to fetch messages:", err);
     res.status(500).json({ error: "Failed to fetch messages" });
