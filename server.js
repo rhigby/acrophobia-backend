@@ -143,6 +143,26 @@ app.get("/api/messages", async (req, res) => {
   }
 });
 
+app.get("/api/messages/reactions", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT message_id, reaction, COUNT(*) as count
+      FROM message_reactions
+      GROUP BY message_id, reaction
+    `);
+
+    const grouped = {};
+    result.rows.forEach(({ message_id, reaction, count }) => {
+      if (!grouped[message_id]) grouped[message_id] = {};
+      grouped[message_id][reaction] = parseInt(count, 10);
+    });
+
+    res.json(grouped);
+  } catch (err) {
+    console.error("Failed to fetch reactions:", err);
+    res.status(500).json({ error: "Failed to fetch reactions" });
+  }
+});
 
 app.get("/api/messages/reaction-users", async (req, res) => {
   try {
