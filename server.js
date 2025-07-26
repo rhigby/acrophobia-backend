@@ -115,7 +115,9 @@ app.post("/api/messages/react", express.json(), async (req, res) => {
   try {
     await pool.query(
       `INSERT INTO message_reactions (message_id, username, reaction)
-       VALUES ($1, $2, $3)`,
+       VALUES ($1, $2, $3)
+       ON CONFLICT (message_id, username)
+       DO UPDATE SET reaction = EXCLUDED.reaction, timestamp = NOW()`,
       [messageId, username, reaction]
     );
     res.status(200).json({ success: true });
@@ -124,6 +126,7 @@ app.post("/api/messages/react", express.json(), async (req, res) => {
     res.status(500).json({ error: "Failed to save reaction" });
   }
 });
+
 
 app.get("/api/messages/reactions", async (req, res) => {
   try {
@@ -141,6 +144,27 @@ app.get("/api/messages/reactions", async (req, res) => {
   } catch (err) {
     console.error("Failed to fetch reactions:", err);
     res.status(500).json({ error: "Failed to fetch reactions" });
+  }
+});
+
+app.get("/api/messages/reaction-users", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT message_id, username, reaction
+      FROM message_reactions
+    `);
+
+    const userMap = {};
+
+    result.rows.forEach(({ message_id, username, reaction }) => {
+      if (!userMap[message_id]) userMap[message_id] = {};
+      userMap[message_id][username] = reaction;
+    });
+
+    res.json(userMap);
+  } catch (err) {
+    console.error("Failed to fetch reaction user map:", err);
+    res.status(500).json({ error: "Failed to fetch reaction users" });
   }
 });
 
@@ -312,6 +336,12 @@ async function initDb() {
       timestamp TIMESTAMPTZ DEFAULT NOW()
     );
   `);
+  
+  await pool.query(`
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_reaction 
+  ON message_reactions (message_id, username);
+`);
+
 
 }
 
