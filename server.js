@@ -138,55 +138,47 @@ app.post("/api/messages", express.json(), async (req, res) => {
 
 app.get("/api/messages", async (req, res) => {
   try {
-    const result = await pool.query(`
-      SELECT 
-        id,
-        title,
-        content,
-        username,
-        timestamp,
-        reply_to AS "replyTo"
-      FROM messages
-      ORDER BY timestamp ASC
-    `);
-
+    const result = await pool.query(`SELECT * FROM messages ORDER BY timestamp ASC`);
     const allMessages = result.rows;
 
+    // Step 1: Normalize and build a map of all messages
     const messageMap = {};
+    allMessages.forEach(msg => {
+      messageMap[msg.id] = {
+        ...msg,
+        replyTo: msg.reply_to ?? null, // normalize naming
+        replies: []
+      };
+    });
+
+    // Step 2: Nest replies under their parents
     const roots = [];
-
-    // First: build initial map with empty replies
-    for (const msg of allMessages) {
-      messageMap[msg.id] = { ...msg, replies: [] };
-    }
-
-    // Second: assign replies properly
-    for (const msg of allMessages) {
-      if (msg.replyTo && messageMap[msg.replyTo]) {
-        messageMap[msg.replyTo].replies.push(messageMap[msg.id]);
+    Object.values(messageMap).forEach(msg => {
+      const parentId = msg.replyTo;
+      if (parentId && messageMap[parentId]) {
+        messageMap[parentId].replies.push(msg);
       } else {
-        roots.push(messageMap[msg.id]);
+        roots.push(msg);
       }
+    });
+
+    // Step 3: Sort all levels newest-to-oldest
+    function sortTree(messages) {
+      messages.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      messages.forEach(m => {
+        if (Array.isArray(m.replies)) sortTree(m.replies);
+      });
     }
 
-    // Recursive sort newest to oldest
-    function sortReplies(list) {
-      list.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-      for (const item of list) {
-        if (item.replies?.length) {
-          sortReplies(item.replies);
-        }
-      }
-    }
-
-    sortReplies(roots);
+    sortTree(roots);
 
     res.json(roots);
   } catch (err) {
-    console.error("❌ Failed to fetch messages:", err);
+    console.error("Failed to fetch messages:", err);
     res.status(500).json({ error: "Failed to fetch messages" });
   }
 });
+
 
 
 
