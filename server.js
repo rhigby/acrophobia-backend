@@ -98,6 +98,52 @@ app.post("/api/update-profile", express.json(), async (req, res) => {
   res.json({ success: true });
 });
 
+app.post("/api/messages/react", express.json(), async (req, res) => {
+  const { id: messageId, reaction } = req.body;
+  const auth = req.headers.authorization;
+  const token = auth?.split(" ")[1];
+
+  if (!token || !messageId || !reaction) {
+    return res.status(400).json({ error: "Missing token, message ID, or reaction" });
+  }
+
+  const result = await pool.query(`SELECT username FROM sessions WHERE token = $1`, [token]);
+  if (result.rows.length === 0) return res.status(401).json({ error: "Invalid token" });
+
+  const username = result.rows[0].username;
+
+  try {
+    await pool.query(
+      `INSERT INTO message_reactions (message_id, username, reaction)
+       VALUES ($1, $2, $3)`,
+      [messageId, username, reaction]
+    );
+    res.status(200).json({ success: true });
+  } catch (err) {
+    console.error("Failed to save reaction:", err);
+    res.status(500).json({ error: "Failed to save reaction" });
+  }
+});
+
+app.get("/api/messages/reactions", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT message_id, reaction, COUNT(*) as count
+      FROM message_reactions
+      GROUP BY message_id, reaction
+    `);
+    const grouped = {};
+    result.rows.forEach(({ message_id, reaction, count }) => {
+      if (!grouped[message_id]) grouped[message_id] = {};
+      grouped[message_id][reaction] = parseInt(count, 10);
+    });
+    res.json(grouped);
+  } catch (err) {
+    console.error("Failed to fetch reactions:", err);
+    res.status(500).json({ error: "Failed to fetch reactions" });
+  }
+});
+
 
 const messages = [];
 
@@ -255,6 +301,17 @@ async function initDb() {
     created_at TIMESTAMPTZ DEFAULT NOW()
   );
 `);
+
+  // ✅ Add this for reactions support
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS message_reactions (
+      id SERIAL PRIMARY KEY,
+      message_id INTEGER REFERENCES messages(id) ON DELETE CASCADE,
+      username TEXT NOT NULL,
+      reaction TEXT NOT NULL,
+      timestamp TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
 
 }
 
