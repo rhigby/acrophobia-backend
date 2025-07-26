@@ -138,27 +138,37 @@ app.post("/api/messages", express.json(), async (req, res) => {
 
 app.get("/api/messages", async (req, res) => {
   try {
-    const result = await pool.query(`SELECT * FROM messages ORDER BY timestamp ASC`);
+    const result = await pool.query(`
+      SELECT 
+        id, 
+        title, 
+        content, 
+        username, 
+        timestamp, 
+        reply_to AS "replyTo"  -- normalize column to match frontend
+      FROM messages 
+      ORDER BY timestamp ASC
+    `);
+
     const allMessages = result.rows;
 
     const messageMap = {};
     allMessages.forEach(msg => {
       msg.replies = [];
-      msg.replyTo = msg.reply_to; // Normalize key for frontend
       messageMap[msg.id] = msg;
     });
 
     const roots = [];
 
-    allMessages.forEach(msg => {
-      if (msg.reply_to && messageMap[msg.reply_to]) {
-        messageMap[msg.reply_to].replies.push(msg);
+    for (const msg of allMessages) {
+      if (msg.replyTo && messageMap[msg.replyTo]) {
+        messageMap[msg.replyTo].replies.push(msg);
       } else {
         roots.push(msg);
       }
-    });
+    }
 
-    // Reverse top-level for newest-first sorting
+    // Optional: reverse top-level for newest-first sort
     roots.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
     res.json(roots);
@@ -167,6 +177,7 @@ app.get("/api/messages", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch messages" });
   }
 });
+
 
 
 app.get("/api/stats", async (req, res) => {
