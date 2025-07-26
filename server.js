@@ -128,24 +128,21 @@ app.post("/api/messages/react", express.json(), async (req, res) => {
 });
 
 
-app.get("/api/messages/reactions", async (req, res) => {
+app.get("/api/messages", async (req, res) => {
   try {
-    const result = await pool.query(`
-      SELECT message_id, reaction, COUNT(*) as count
-      FROM message_reactions
-      GROUP BY message_id, reaction
-    `);
-    const grouped = {};
-    result.rows.forEach(({ message_id, reaction, count }) => {
-      if (!grouped[message_id]) grouped[message_id] = {};
-      grouped[message_id][reaction] = parseInt(count, 10);
-    });
-    res.json(grouped);
+    const result = await pool.query(`SELECT * FROM messages ORDER BY timestamp ASC`);
+    const allMessages = result.rows.map((msg) => ({
+      ...msg,
+      replyTo: msg.reply_to,  // normalize for frontend
+    }));
+
+    res.json(allMessages);  // ✅ send flat list
   } catch (err) {
-    console.error("Failed to fetch reactions:", err);
-    res.status(500).json({ error: "Failed to fetch reactions" });
+    console.error("Failed to fetch messages:", err);
+    res.status(500).json({ error: "Failed to fetch messages" });
   }
 });
+
 
 app.get("/api/messages/reaction-users", async (req, res) => {
   try {
