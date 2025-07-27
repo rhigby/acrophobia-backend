@@ -1,6 +1,6 @@
 // backend/server.js
 require("dotenv").config();
-
+const { containsInappropriate } = require("./utils/profanityFilter");
 const express = require("express");
 const activeUsers = new Map();
 const userRooms = {}; // Track each user's current room
@@ -963,6 +963,7 @@ socket.on("chat_message", ({ room, text }) => {
       entries: [],
       votes: {},
       acronym: "",
+      filterProfanity: !["room1", "No Filter", "nsfw"].includes(room),
       faceoff: {
         active: false,
         round: 0,
@@ -1003,6 +1004,14 @@ socket.on("chat_message", ({ room, text }) => {
 
   const username = socket.data?.username;
   if (!username || roomData.entries.find(e => e.username === username)) return;
+
+  if (roomData.filterProfanity) {
+    const result = containsInappropriate(text);
+    if (result) {
+      socket.emit("error_message", `Inappropriate content detected: ${result.matched}`);
+    return;
+    }
+  }
 
   const id = `${Date.now()}-${Math.random()}`;
   const elapsed = Date.now() - roomData.roundStartTime;
