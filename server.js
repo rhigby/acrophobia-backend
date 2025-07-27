@@ -400,7 +400,7 @@ function startCountdown(roomId, seconds, onComplete) {
 
 function showFaceoffResults(roomId) {
   const room = rooms[roomId];
-  if (!room || !room.faceoff.active) return;
+  if (!room || !room.faceoff?.active) return;
 
   const voteCounts = {};
   for (const vote of Object.values(room.votes)) {
@@ -461,21 +461,30 @@ function showFaceoffResults(roomId) {
     emitToRoom(roomId, "phase", "faceoff_game_over");
     emitToRoom(roomId, "final_faceoff_scores", room.faceoff.scores);
 
-    // Optionally reset room or transition back to main game
-    room.phase = "waiting";
-    room.entries = [];
-    room.votes = {};
-    room.acronym = "";
-    room.faceoff.active = false;
+    // ⏳ Wait and reset room state before restarting game
+    setTimeout(() => {
+      room.phase = "waiting";
+      room.round = 0;
+      room.entries = [];
+      room.votes = {};
+      room.acronym = "";
+      room.faceoff = { active: false, round: 0, players: [], scores: {} };
+      room.scores = {}; // optional: full reset for new match
 
-    // Reset scores if you want the room to start fresh again:
-    // room.scores = {};
+      emitToRoom(roomId, "phase", "waiting");
+      emitToRoom(roomId, "players", room.players);
+
+      if (room.players.length >= 2) {
+        startGame(roomId);
+      }
+    }, 30000); // 30 seconds between matches
   } else {
     room.faceoff.round++;
     emitToRoom(roomId, "phase", "faceoff_next_round");
     setTimeout(() => runFaceoffRound(roomId), 8000);
   }
 }
+
 
 
 
