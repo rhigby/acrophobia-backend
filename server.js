@@ -20,11 +20,11 @@ const io = new Server(server, {
   }
 });
 const roomSettings = {
-  CleanFun: { filterProfanity: true },
-  AnythingGoes: { filterProfanity: false },
-  TriviaNight: { filterProfanity: true },
-  LateNight: { filterProfanity: false },
-  Classroom: { filterProfanity: true }
+  CleanFun: { filterProfanity: true, type: "clean" },
+  AnythingGoes: { filterProfanity: false, type: "uncensored" },
+  TriviaNight: { filterProfanity: true, type: "clean" },
+  LateNight: { filterProfanity: false, type: "uncensored" },
+  Classroom: { filterProfanity: true, type: "clean" }
 };
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -961,23 +961,25 @@ socket.on("chat_message", ({ room, text }) => {
   io.emit("active_users", getActiveUserList());
 
   if (!rooms[room]) {
-    rooms[room] = {
-      players: [],
-      scores: {},
-      phase: "waiting",
+  const defaultSettings = { filterProfanity: false };
+  rooms[room] = {
+    players: [],
+    scores: {},
+    phase: "waiting",
+    round: 0,
+    entries: [],
+    votes: {},
+    acronym: "",
+    faceoff: {
+      active: false,
       round: 0,
-      entries: [],
-      votes: {},
-      acronym: "",
-      filterProfanity: !["room1", "No Filter", "nsfw"].includes(room),
-      faceoff: {
-        active: false,
-        round: 0,
-        players: [],
-        scores: {}
-      }
-    };
-  }
+      players: [],
+      scores: {}
+    },
+    ...defaultSettings,
+    ...roomSettings[room]  // Overrides default if settings exist
+  };
+}
 
   const r = rooms[room];
 
