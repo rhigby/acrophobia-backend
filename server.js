@@ -1062,7 +1062,7 @@ socket.on("leave_room", () => {
   const room = socket.data?.room;
 
   if (username) {
-    console.log(${username} disconnected);
+    console.log(`👋 ${username} disconnected`);
     userSockets.delete(username);
     activeUsers.set(username, "lobby");
     userRooms[username] = "lobby";
@@ -1077,7 +1077,7 @@ socket.on("leave_room", () => {
 
     // If room is empty, clean it up
     if (rooms[room].players.length === 0) {
-      console.log(Room ${room} is now empty. Deleting room.);
+      console.log(`🧹 Room ${room} is now empty. Deleting room.`);
       delete rooms[room];
       delete roomRounds?.[room]; // safe optional chaining
     }
