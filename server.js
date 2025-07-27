@@ -19,7 +19,13 @@ const io = new Server(server, {
     credentials: true
   }
 });
-
+const roomSettings = {
+  CleanFun: { filterProfanity: true },
+  AnythingGoes: { filterProfanity: false },
+  TriviaNight: { filterProfanity: true },
+  LateNight: { filterProfanity: false },
+  Classroom: { filterProfanity: true }
+};
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false
