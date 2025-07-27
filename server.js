@@ -941,13 +941,34 @@ io.on("connection", (socket) => {
 });
 
 
-
+const [chatError, setChatError] = useState(null);
+useEffect(() => {
+  socket.on("entry_rejected", ({ reason }) => {
+    if (reason.includes("chat")) {
+      setChatError(reason);
+      setTimeout(() => setChatError(null), 5000);
+    }
+  });
+}, []);
 
 socket.on("chat_message", ({ room, text }) => {
   const username = socket.data?.username;
   if (!username || !text || !room) return;
+
+  const roomData = rooms[room];
+  if (roomData?.filterProfanity) {
+    const result = containsInappropriate(text);
+    if (result) {
+      socket.emit("entry_rejected", {
+        reason: `Inappropriate language in chat: ${result.matched}`
+      });
+      return;
+    }
+  }
+
   io.to(room).emit("chat_message", { username, text });
 });
+
 
   socket.on("join_room", ({ room }, callback) => {
   io.emit("room_list", getRoomStats());
