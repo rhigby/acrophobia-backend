@@ -638,6 +638,13 @@ function calculateAndEmitResults(roomId) {
   }
 }
 
+function getTopTwoPlayers(scores) {
+  return Object.entries(scores)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 2)
+    .map(([username]) => username);
+}
+
 function showResults(roomId) {
   calculateAndEmitResults(roomId);
 
