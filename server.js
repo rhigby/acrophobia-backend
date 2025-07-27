@@ -700,7 +700,15 @@ function runFaceoffRound(roomId) {
   room.votes = {};
 
   emitToRoom(roomId, "round_number", room.faceoff.round);
-  emitToRoom(roomId, "acronym", acronym);
+    for (const socketId of io.sockets.adapter.rooms.get(roomId) || []) {
+    const playerSocket = io.sockets.sockets.get(socketId);
+    if (!playerSocket) continue;
+  
+    const player = room.players.find(p => p.socketId === socketId);
+    if (player && room.faceoff.players.includes(player.username)) {
+      playerSocket.emit("acronym", acronym);
+    }
+  }
   emitToRoom(roomId, "phase", "faceoff_submit");
   emitToRoom(roomId, "faceoff_players", room.faceoff.players);
 
