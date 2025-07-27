@@ -1042,21 +1042,6 @@ socket.on("chat_message", ({ room, text }) => {
   io.to(room).emit("votes", roomData.votes);
 });
 
-  function cleanupRoom(roomId) {
-  if (!rooms[roomId]) return;
-
-  console.log(`🧹 Cleaning up room: ${roomId}`);
-
-  delete rooms[roomId];
-  delete roomRounds?.[roomId];
-  delete roomTimers?.[roomId];
-  delete faceoffState?.[roomId];       // Optional: your faceoff data if separate
-  delete voteCounts?.[roomId];         // Optional: global votes
-  delete submissions?.[roomId];        // Optional: global entries
-  // Add any other per-room maps here
-
-  console.log(`✅ Room ${roomId} fully cleaned`);
-}
 
 
 socket.on("leave_room", () => {
@@ -1077,7 +1062,7 @@ socket.on("leave_room", () => {
   const room = socket.data?.room;
 
   if (username) {
-    console.log(👋 ${username} disconnected);
+    console.log(${username} disconnected);
     userSockets.delete(username);
     activeUsers.set(username, "lobby");
     userRooms[username] = "lobby";
@@ -1092,7 +1077,7 @@ socket.on("leave_room", () => {
 
     // If room is empty, clean it up
     if (rooms[room].players.length === 0) {
-      console.log(🧹 Room ${room} is now empty. Deleting room.);
+      console.log(Room ${room} is now empty. Deleting room.);
       delete rooms[room];
       delete roomRounds?.[room]; // safe optional chaining
     }
