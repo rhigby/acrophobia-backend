@@ -1008,8 +1008,10 @@ socket.on("chat_message", ({ room, text }) => {
   if (roomData.filterProfanity) {
     const result = containsInappropriate(text);
     if (result) {
-      socket.emit("error_message", `Inappropriate content detected: ${result.matched}`);
-    return;
+      socket.emit("entry_rejected", {
+        reason: `Inappropriate content detected: ${result.matched}`
+      });
+      return;
     }
   }
 
