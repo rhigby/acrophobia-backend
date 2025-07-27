@@ -1067,24 +1067,23 @@ socket.on("leave_room", () => {
     // Remove player from room
     rooms[room].players = rooms[room].players.filter(p => p.id !== socket.id);
 
-    // Notify others
+    // Notify room
     emitToRoom(room, "players", rooms[room].players);
 
-    // Leave socket.io room
+    // Remove from socket.io room
     socket.leave(room);
     socket.data.room = null;
 
-    // Update global user state
-    activeUsers.set(username, "lobby");
-    userRooms[username] = "lobby";
-    io.emit("active_users", getActiveUserList());
+    // ✅ Do NOT reset global login/session data here!
+    // Leave activeUsers and userSockets untouched
 
-    // Clean up if room is now empty
+    // Clean up room if empty
     if (rooms[room].players.length === 0) {
       cleanupRoom(room);
     }
   }
 });
+
 
   
   socket.on("disconnect", () => {
@@ -1094,18 +1093,14 @@ socket.on("leave_room", () => {
   if (username) {
     console.log(`👋 ${username} disconnected`);
     userSockets.delete(username);
-    activeUsers.set(username, "lobby");
-    userRooms[username] = "lobby";
+    activeUsers.set(username, "offline");
+    userRooms[username] = "offline";
   }
 
   if (room && rooms[room]) {
-    // Remove the player from the room
     rooms[room].players = rooms[room].players.filter(p => p.id !== socket.id);
-
-    // Broadcast updated player list
     emitToRoom(room, "players", rooms[room].players);
 
-    // Clean up if room is now empty
     if (rooms[room].players.length === 0) {
       cleanupRoom(room);
     }
@@ -1113,6 +1108,7 @@ socket.on("leave_room", () => {
 
   io.emit("active_users", getActiveUserList());
 });
+
 
 
 });
