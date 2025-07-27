@@ -684,10 +684,37 @@ function runFaceoffRound(roomId) {
   emitToRoom(roomId, "phase", "faceoff_submit");
   emitToRoom(roomId, "faceoff_players", room.faceoff.players);
 
-  revealAcronymLetters(roomId, acronym, () => {
-    startCountdown(roomId, 45, () => startFaceoffVoting(roomId));
+ revealAcronymLetters(roomId, room.acronym, () => {
+  room.roundStartTime = Date.now();
+  startCountdown(roomId, 45, () => {
+    startFaceoffVoting(roomId); // 🔥 RIGHT HERE
+  });
+});
+}
+
+function startFaceoffVoting(roomId) {
+  const room = rooms[roomId];
+  if (!room || !room.faceoff?.active) return;
+
+  room.phase = "faceoff_vote";
+  emitToRoom(roomId, "phase", "faceoff_vote");
+
+  const roomSockets = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
+
+  for (const socketId of roomSockets) {
+    const playerSocket = io.sockets.sockets.get(socketId);
+    if (!playerSocket) continue;
+
+    // Everyone sees a shuffled entry list
+    const shuffledEntries = [...room.entries].sort(() => Math.random() - 0.5);
+    playerSocket.emit("entries", shuffledEntries);
+  }
+
+  startCountdown(roomId, 30, () => {
+    showFaceoffResults(roomId);
   });
 }
+
 
 function getRoomStats() {
   const stats = {};
