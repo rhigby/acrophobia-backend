@@ -644,29 +644,33 @@ function showResults(roomId) {
   startCountdown(roomId, 30, () => {
     const room = rooms[roomId];
     if (!room) return;
+
     if (room.round < MAX_ROUNDS) {
+      // Continue to next round
       room.round++;
       emitToRoom(roomId, "phase", "next_round_overlay");
       emitToRoom(roomId, "round_number", room.round);
+
       setTimeout(() => runRound(roomId), 10000);
     } else {
-      emitToRoom(roomId, "phase", "game_over");
-      setTimeout(() => {
-        room.phase = "waiting";
-        room.round = 0;
-        room.entries = [];
-        room.votes = {};
-        room.acronym = "";
-        room.scores = {};
-        emitToRoom(roomId, "phase", "waiting");
-        emitToRoom(roomId, "players", room.players);
-        if (room.players.length >= 2) {
-          startGame(roomId);
-        }
-      }, 30000);
+      // Game over — begin faceoff round
+      const topPlayers = getTopTwoPlayers(room.scores);
+      room.faceoff = {
+        active: true,
+        round: 0,
+        players: topPlayers,
+        scores: {}
+      };
+
+      emitToRoom(roomId, "phase", "faceoff_intro");
+      emitToRoom(roomId, "faceoff_players", topPlayers);
+
+      // Start faceoff after short intro delay
+      setTimeout(() => runFaceoffRound(roomId), 8000);
     }
   });
 }
+
 function runFaceoffRound(roomId) {
   const room = rooms[roomId];
   if (!room || !room.faceoff.active) return;
