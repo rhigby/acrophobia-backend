@@ -55,6 +55,7 @@ app.get("/api/me", async (req, res) => {
   res.json({ username: result.rows[0].username });
 });
 
+
 function safeOriginCheck(origin, callback) {
   if (!origin) return callback(null, true);
   try {
@@ -396,6 +397,88 @@ function startCountdown(roomId, seconds, onComplete) {
   }, 1000);
 }
 
+
+function showFaceoffResults(roomId) {
+  const room = rooms[roomId];
+  if (!room || !room.faceoff.active) return;
+
+  const voteCounts = {};
+  for (const vote of Object.values(room.votes)) {
+    voteCounts[vote] = (voteCounts[vote] || 0) + 1;
+  }
+
+  let highestVotes = 0;
+  let winningEntryId = null;
+  const firstVoteEntry = room.entries.find(entry => voteCounts[entry.id]);
+
+  for (const entry of room.entries) {
+    const count = voteCounts[entry.id] || 0;
+    if (!room.faceoff.scores[entry.username]) room.faceoff.scores[entry.username] = 0;
+    room.faceoff.scores[entry.username] += count;
+
+    if (count > highestVotes) {
+      highestVotes = count;
+      winningEntryId = entry.id;
+    }
+  }
+
+  if (firstVoteEntry) {
+    room.faceoff.scores[firstVoteEntry.username] += 3;
+  }
+
+  if (winningEntryId && highestVotes > 0) {
+    const winnerEntry = room.entries.find(e => e.id === winningEntryId);
+    if (winnerEntry) room.faceoff.scores[winnerEntry.username] += 5;
+  }
+
+  const votersOfWinner = [];
+  for (const [voter, entryId] of Object.entries(room.votes)) {
+    if (entryId === winningEntryId) {
+      votersOfWinner.push(voter);
+    }
+  }
+
+  emitToRoom(roomId, "votes", voteCounts);
+  emitToRoom(roomId, "scores", room.faceoff.scores);
+  emitToRoom(roomId, "highlight_results", {
+    fastest: firstVoteEntry?.id,
+    winner: winningEntryId,
+    voters: votersOfWinner
+  });
+  emitToRoom(roomId, "results_metadata", {
+    timestamps: room.entries.map(entry => ({
+      id: entry.id,
+      username: entry.username,
+      text: entry.text,
+      time: (entry.elapsed / 1000).toFixed(2)
+    }))
+  });
+
+  emitToRoom(roomId, "phase", "faceoff_results");
+
+  // ✅ Final round check
+  if (room.faceoff.round >= 3) {
+    emitToRoom(roomId, "phase", "faceoff_game_over");
+    emitToRoom(roomId, "final_faceoff_scores", room.faceoff.scores);
+
+    // Optionally reset room or transition back to main game
+    room.phase = "waiting";
+    room.entries = [];
+    room.votes = {};
+    room.acronym = "";
+    room.faceoff.active = false;
+
+    // Reset scores if you want the room to start fresh again:
+    // room.scores = {};
+  } else {
+    room.faceoff.round++;
+    emitToRoom(roomId, "phase", "faceoff_next_round");
+    setTimeout(() => runFaceoffRound(roomId), 8000);
+  }
+}
+
+
+
 function revealAcronymLetters(roomId, acronym, callback) {
   let index = 0;
   const interval = setInterval(() => {
@@ -584,6 +667,28 @@ function showResults(roomId) {
     }
   });
 }
+function runFaceoffRound(roomId) {
+  const room = rooms[roomId];
+  if (!room || !room.faceoff.active) return;
+
+  const acronymLength = 2 + room.faceoff.round; // 3 → 5
+  const acronym = createAcronym(acronymLength);
+
+  room.phase = "faceoff_submit";
+  room.acronym = acronym;
+  room.entries = [];
+  room.votes = {};
+
+  emitToRoom(roomId, "round_number", room.faceoff.round);
+  emitToRoom(roomId, "acronym", acronym);
+  emitToRoom(roomId, "phase", "faceoff_submit");
+  emitToRoom(roomId, "faceoff_players", room.faceoff.players);
+
+  revealAcronymLetters(roomId, acronym, () => {
+    startCountdown(roomId, 45, () => startFaceoffVoting(roomId));
+  });
+}
+
 function getRoomStats() {
   const stats = {};
   for (const roomName in rooms) {
@@ -802,7 +907,13 @@ socket.on("chat_message", ({ room, text }) => {
       round: 0,
       entries: [],
       votes: {},
-      acronym: ""
+      acronym: "",
+      faceoff: {
+        active: false,
+        round: 0,
+        players: [],
+        scores: {}
+      }
     };
   }
 
@@ -849,6 +960,10 @@ socket.on("chat_message", ({ room, text }) => {
 
   socket.emit("entry_submitted", { id, text });
   io.to(room).emit("entries", roomData.entries);
+    if (room.faceoff?.active) {
+      if (!room.faceoff.players.includes(username)) return;
+    }
+
 });
 
 
