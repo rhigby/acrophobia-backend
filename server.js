@@ -941,15 +941,7 @@ io.on("connection", (socket) => {
 });
 
 
-const [chatError, setChatError] = useState(null);
-useEffect(() => {
-  socket.on("entry_rejected", ({ reason }) => {
-    if (reason.includes("chat")) {
-      setChatError(reason);
-      setTimeout(() => setChatError(null), 5000);
-    }
-  });
-}, []);
+
 
 socket.on("chat_message", ({ room, text }) => {
   const username = socket.data?.username;
@@ -959,7 +951,7 @@ socket.on("chat_message", ({ room, text }) => {
   if (roomData?.filterProfanity) {
     const result = containsInappropriate(text);
     if (result) {
-      socket.emit("entry_rejected", {
+      socket.emit("chat_error", {
         reason: `Inappropriate language in chat: ${result.matched}`
       });
       return;
