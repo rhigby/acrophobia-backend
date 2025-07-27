@@ -1060,50 +1060,45 @@ socket.on("chat_message", ({ room, text }) => {
 
 
 socket.on("leave_room", () => {
-  const room = socket.data?.room;
-  const username = socket.data?.username;
-
-  if (!room || !rooms[room]) return;
-
-  // Remove the player from the room’s player list
-  rooms[room].players = rooms[room].players.filter(p => p.id !== socket.id);
-
-  emitToRoom(room, "players", rooms[room].players);
-
-  socket.leave(room);
-
-  // ⚠️ Don't modify socket.data.room — keep it intact for session tracking
-
-  // ⚠️ Don't touch activeUsers, userSockets, userRooms
-
-  if (rooms[room].players.length === 0) {
-    cleanupRoom(room);
-  }
-});
-
-
-
+    const room = socket.data?.room;
+    const username = socket.data?.username;
+    if (room && rooms[room]) {
+      rooms[room].players = rooms[room].players.filter(p => p.id !== socket.id);
+      emitToRoom(room, "players", rooms[room].players);
+      socket.leave(room);
+      socket.data.room = null;
+      activeUsers.set(username, "lobby");
+      io.emit("active_users", getActiveUserList());
+    }
+  });
   
   socket.on("disconnect", () => {
   const username = socket.data?.username;
   const room = socket.data?.room;
 
   if (username) {
-    console.log(`👋 ${username} disconnected`);
+    console.log(👋 ${username} disconnected);
     userSockets.delete(username);
-    activeUsers.delete(username); // or .set(username, "offline")
-    userRooms[username] = "offline";
+    activeUsers.set(username, "lobby");
+    userRooms[username] = "lobby";
   }
 
   if (room && rooms[room]) {
-    rooms[room].players = rooms[room].players.filter(p => p.id !== socket.id);
+    // Remove the player from the room
+    rooms[room].players = rooms[room].players.filter((p) => p.id !== socket.id);
+
+    // Notify others in the room
     emitToRoom(room, "players", rooms[room].players);
 
+    // If room is empty, clean it up
     if (rooms[room].players.length === 0) {
-      cleanupRoom(room);
+      console.log(🧹 Room ${room} is now empty. Deleting room.);
+      delete rooms[room];
+      delete roomRounds?.[room]; // safe optional chaining
     }
   }
 
+  // Broadcast updated active user list to everyone
   io.emit("active_users", getActiveUserList());
 });
 
