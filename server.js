@@ -1,6 +1,11 @@
 // backend/server.js
 require("dotenv").config();
-const { containsInappropriate } = require("./utils/profanityFilter");
+const {
+  containsInappropriate,
+  roomSettings,
+  getThemeForRoom
+} = require("./utils/profanityFilter");
+
 const express = require("express");
 const activeUsers = new Map();
 const userRooms = {}; // Track each user's current room
@@ -58,7 +63,7 @@ const roomSettings = {
     theme: "anything"
   }
 };
-const { roomSettings: predefinedRoomSettings } = require("./profanityFilter");
+
 const currentTheme = roomSettings[room]?.theme || "general";
 const wordBank = require(`./themes/${currentTheme}.json`);
 
