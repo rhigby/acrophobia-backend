@@ -782,9 +782,9 @@ function startFaceoffVoting(roomId) {
 }
 
 function launchBot(botName, room) {
-  const { spawn } = require("child_process");
-  const bot = spawn("node", ["test-bot.js", botName, room], {
-    cwd: __dirname,
+  const botPath = path.join(__dirname, "..", "test-bot.js"); // adjust to point to root
+  const bot = spawn("node", [botPath, botName, room], {
+    cwd: path.join(__dirname, ".."),
     env: { ...process.env, BOT_NAME: botName, ROOM: room }
   });
 
