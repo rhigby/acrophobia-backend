@@ -26,43 +26,7 @@ const io = new Server(server, {
 });
 const path = require("path");
 const { spawn } = require("child_process");
-const roomSettings = {
-   Eighties: {
-    displayName: "80's Theme",
-    filterProfanity: true,
-    theme: "eighties"
-  },
-   Ninties: {
-    displayName: "90's Theme",
-    filterProfanity: true,
-    theme: "ninties"
-  },
-  CleanFun: {
-    displayName: "Clean Fun",
-    filterProfanity: true,
-    theme: "general"
-  },
-  SportsArena: {
-    displayName: "Sports Arena",
-    filterProfanity: true,
-    theme: "sports"
-  },
-   AnythingGoes: {
-    displayName: "Anything Goes",
-    filterProfanity: false,
-    theme: "anything"
-  },
-    LateNight: {
-    displayName: "Late Night",
-    filterProfanity: false,
-    theme: "anything"
-  },
-   TheCouch: {
-    displayName: "The Couch",
-    filterProfanity: false,
-    theme: "anything"
-  }
-};
+
 
 const currentTheme = roomSettings[room]?.theme || "general";
 const wordBank = require(`./themes/${currentTheme}.json`);
