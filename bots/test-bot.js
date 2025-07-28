@@ -142,6 +142,17 @@ async function runBot(username) {
   }
 }
 
+const botName = process.env.BOT_NAME || process.argv[2];
+const roomName = process.env.ROOM || process.argv[3];
+
+// Only launch a single bot if BOT_NAME and ROOM are provided
+if (botName && roomName) {
+  runBot(botName);
+} else {
+  console.log("❌ BOT_NAME and ROOM must be set to launch a bot");
+  process.exit(1);
+}
+
 // 👇 Prevent duplicate launch and enforce unique usernames
 // const baseNames = ["bot1", "bot2", "bot3", "bot4"];
 // baseNames.forEach(base => {
