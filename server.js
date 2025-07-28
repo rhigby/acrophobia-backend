@@ -1128,15 +1128,19 @@ socket.on("join_room", (data, callback) => {
   io.emit("active_users", getActiveUserList());
 
   // 🤖 Auto-join bots if only 1 real player
+  const existingBotNames = new Set(r.players.map(p => p.username));
   const realPlayers = r.players.filter(p => !p.username.startsWith("bot"));
   if (realPlayers.length === 1 && !roomBots[room]) {
-    roomBots[room] = [];
-    ["bot1", "bot2", "bot3"].forEach((suffix, i) => {
-      const botName = `${room}-bot${i + 1}`;
+  roomBots[room] = [];
+
+  ["bot1", "bot2", "bot3"].forEach((suffix, i) => {
+    const botName = `${room}-bot${i + 1}`;
+    if (!existingBotNames.has(botName)) {
       const bot = launchBot(botName, room);
       if (bot) roomBots[room].push(bot);
-    });
-  }
+    }
+  });
+}
 
   // ▶️ Start game if ready
   if (r.players.length >= 2 && r.phase === "waiting") {
@@ -1220,42 +1224,41 @@ socket.on("leave_room", () => {
   
   socket.on("disconnect", () => {
   const username = socket.data.username;
-  const room = userRooms[username];
+  const room = socket.data.room;
 
-  console.log(`🔌 ${username} disconnected`);
+  if (username) {
+    activeUsers.delete(username);
+    delete userRooms[username];
+  }
 
-  // Remove from tracking maps
-  userSockets.delete(username);
-  activeUsers.delete(username);
-  delete userRooms[username];
-
-  // 🧹 Remove player from room
   if (room && rooms[room]) {
-    rooms[room].players = rooms[room].players.filter((p) => p.id !== socket.id);
+    // Remove from room
+    rooms[room].players = rooms[room].players.filter(p => p.username !== username);
     emitToRoom(room, "players", rooms[room].players);
 
-    const remainingUsernames = rooms[room].players.map(p => p.username);
-    const realPlayers = remainingUsernames.filter(name => !name.startsWith("bot"));
+    const realPlayers = rooms[room].players.filter(p => !p.username.startsWith("bot"));
 
+    // 👇 Reset room if only bots left
     if (realPlayers.length === 0) {
       console.log(`🧹 Resetting room ${room} (no real players left)`);
 
-      delete rooms[room];
-      delete roomRounds[room];
-
-      // Optionally kill bot processes here if tracking them
+      // Kill bot processes if tracked
       if (roomBots[room]) {
-        roomBots[room].forEach(proc => proc.kill());
+        roomBots[room].forEach(botProc => botProc.kill());
         delete roomBots[room];
       }
+
+      delete rooms[room];
+      delete roomSettings[room];
+      delete roomRounds[room];
 
       io.emit("room_list", getRoomStats());
     }
   }
 
-  // Update active user list
   io.emit("active_users", getActiveUserList());
 });
+
 
 
 
