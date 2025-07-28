@@ -987,8 +987,9 @@ socket.on("chat_message", ({ room, text }) => {
  
 
 socket.on("join_room", ({ room }, callback) => {
-  const currentTheme = roomSettings[room]?.theme || "general";
-  const wordBank = require(`./themes/${currentTheme}.json`);
+ const currentTheme = getThemeForRoom(room);
+  const themePath = path.join(__dirname, "bots", "themes", `${theme}.json`);
+  const wordBank = require(themePath);
   io.emit("room_list", getRoomStats());
 
   const username = socket.data?.username;
