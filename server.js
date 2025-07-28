@@ -781,6 +781,25 @@ function startFaceoffVoting(roomId) {
   });
 }
 
+function launchBot(botName, room) {
+  const { spawn } = require("child_process");
+  const bot = spawn("node", ["test-bot.js", botName, room], {
+    cwd: __dirname,
+    env: { ...process.env, BOT_NAME: botName, ROOM: room }
+  });
+
+  bot.stdout.on("data", (data) => {
+    console.log(`[${botName}]: ${data}`);
+  });
+
+  bot.stderr.on("data", (data) => {
+    console.error(`[${botName} ERROR]: ${data}`);
+  });
+
+  bot.on("close", (code) => {
+    console.log(`[${botName}] exited with code ${code}`);
+  });
+}
 
 function getRoomStats() {
   const stats = {};
