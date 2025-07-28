@@ -105,15 +105,13 @@ function safeOriginCheck(origin, callback) {
 
 router.post("/api/register", async (req, res) => {
   const { username, email, password } = req.body;
-
   if (!username || !email || !password) {
     return res.status(400).json({ message: "Missing required fields" });
   }
 
   try {
-    // Check if username or email exists
     const existing = await pool.query(
-       "SELECT username FROM users WHERE username = $1 OR email = $2",
+      "SELECT username FROM users WHERE username = $1 OR email = $2",
       [username, email]
     );
 
@@ -121,17 +119,20 @@ router.post("/api/register", async (req, res) => {
       return res.status(409).json({ message: "Username or email already exists" });
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Insert into DB
     await pool.query(
       "INSERT INTO users (username, email, password) VALUES ($1, $2, $3)",
       [username, email, hashedPassword]
     );
 
-    res.status(201).json({ success: true, message: "User registered successfully" });
+    res.status(201).json({ success: true });
   } catch (err) {
+    if (err.code === "23505") {
+      // Unique constraint violation
+      return res.status(409).json({ message: "Username or email already exists" });
+    }
+
     console.error("Registration error:", err);
     res.status(500).json({ message: "Internal server error" });
   }
