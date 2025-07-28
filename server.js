@@ -70,6 +70,11 @@ app.get("/api/me", async (req, res) => {
 });
 
 function launchBot(botName, room) {
+  if (roomBots[room]?.some(proc => proc.spawnargs.includes(botName))) {
+    console.log(`⚠️ Bot ${botName} already running in ${room}`);
+    return;
+  }
+
   const botPath = path.join(__dirname, "bots", "test-bot.js");
   const bot = spawn("node", [botPath, botName, room], {
     cwd: __dirname,
@@ -91,6 +96,7 @@ function launchBot(botName, room) {
     console.log(`[${botName}] exited with code ${code}`);
   });
 }
+
 
 
 
