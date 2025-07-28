@@ -24,12 +24,12 @@ const roomSettings = {
    Eighties: {
     displayName: "80's Theme",
     filterProfanity: true,
-    theme: "general"
+    theme: "eighties"
   },
    Ninties: {
     displayName: "90's Theme",
     filterProfanity: true,
-    theme: "general"
+    theme: "ninties"
   },
   CleanFun: {
     displayName: "Clean Fun",
@@ -44,17 +44,17 @@ const roomSettings = {
    AnythingGoes: {
     displayName: "Anything Goes",
     filterProfanity: false,
-    theme: "sports"
+    theme: "anything"
   },
     LateNight: {
     displayName: "Late Night",
     filterProfanity: false,
-    theme: "sports"
+    theme: "anything"
   },
    TheCouch: {
     displayName: "The Couch",
     filterProfanity: false,
-    theme: "sports"
+    theme: "anything"
   }
 };
 
