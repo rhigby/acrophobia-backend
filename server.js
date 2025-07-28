@@ -448,11 +448,19 @@ async function initDb() {
 initDb().catch(console.error);
 
 function getActiveUserList() {
-  return Array.from(activeUsers.entries()).map(([username, room]) => ({
-    username,
-    room
-  }));
+  const seen = new Set();
+  const list = [];
+
+  for (const [username, room] of activeUsers.entries()) {
+    if (!seen.has(username)) {
+      list.push({ username, room });
+      seen.add(username);
+    }
+  }
+
+  return list;
 }
+
 const rooms = {};
 const MAX_PLAYERS = 10;
 const MAX_ROUNDS = 5;
@@ -1200,19 +1208,27 @@ socket.on("leave_room", () => {
   }
 
   if (room && rooms[room]) {
-    // Remove the player from the room
-    rooms[room].players = rooms[room].players.filter((p) => p.id !== socket.id);
+  // Remove the player from the room
+  rooms[room].players = rooms[room].players.filter((p) => p.id !== socket.id);
 
-    // Notify others in the room
-    emitToRoom(room, "players", rooms[room].players);
+  // Notify others in the room
+  emitToRoom(room, "players", rooms[room].players);
 
-    // If room is empty, clean it up
-    if (rooms[room].players.length === 0) {
-      console.log(`🧹 Room ${room} is now empty. Deleting room.`);
-      delete rooms[room];
-      delete roomRounds?.[room]; // safe optional chaining
-    }
+  const remainingPlayers = rooms[room].players.map(p => p.username);
+  const realPlayers = remainingPlayers.filter(name => !name.startsWith("bot"));
+
+  if (realPlayers.length === 0) {
+    // 🧹 No real players left — clean up bots and reset
+    console.log(`🧹 Resetting room ${room} (no real players)`);
+
+    delete rooms[room];
+    delete roomRounds?.[room];
+
+    // Optional: tell everyone the room is gone
+    io.emit("room_list", getRoomStats());
   }
+}
+
 
   // Broadcast updated active user list to everyone
   io.emit("active_users", getActiveUserList());
