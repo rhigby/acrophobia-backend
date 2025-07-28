@@ -55,6 +55,8 @@ app.use(cors({
 
 app.use(express.json());
 
+app.use(router);
+
 app.get("/api/me", async (req, res) => {
   const auth = req.headers.authorization;
   const token = auth?.split(" ")[1];
