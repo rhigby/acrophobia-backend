@@ -119,7 +119,9 @@ router.post("/api/register", async (req, res) => {
       return res.status(409).json({ message: "Username or email already exists" });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    //const hashedPassword = await bcrypt.hash(password, 10);
+
+    const hashedPassword = password;
 
     await pool.query(
       "INSERT INTO users (username, email, password) VALUES ($1, $2, $3)",
