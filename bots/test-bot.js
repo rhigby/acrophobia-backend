@@ -1,7 +1,8 @@
 const { io } = require("socket.io-client");
 const path = require("path");
 const fs = require("fs");
-const fetch = require("node-fetch"); // ensure this is installed if not already
+//const fetch = require("node-fetch"); // ensure this is installed if not already
+const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
 const SERVER_URL = process.env.SERVER_URL || "https://acrophobia-backend-2.onrender.com";
 const ROOM = process.env.ROOM || "room1";
