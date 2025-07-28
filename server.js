@@ -69,6 +69,28 @@ app.get("/api/me", async (req, res) => {
   res.json({ username: result.rows[0].username });
 });
 
+function cleanupRoomIfEmpty(room) {
+  const players = rooms[room]?.players || [];
+  const realPlayers = players.filter(p => !p.username.startsWith("bot"));
+
+  if (realPlayers.length === 0) {
+    console.log(`🧹 Resetting room ${room} (no real players left)`);
+
+    // Kill bots
+    if (roomBots[room]) {
+      roomBots[room].forEach(botProc => botProc.kill());
+      delete roomBots[room];
+    }
+
+    delete rooms[room];
+    delete roomSettings[room];
+    delete roomRounds[room];
+
+    io.emit("room_list", getRoomStats());
+  }
+}
+
+
 function launchBot(botName, room) {
   if (roomBots[room]?.some(proc => proc.spawnargs.includes(botName))) {
     console.log(`⚠️ Bot ${botName} already running in ${room}`);
@@ -1216,17 +1238,22 @@ socket.on("join_room", (data, callback) => {
 
 
 socket.on("leave_room", () => {
-    const room = socket.data?.room;
-    const username = socket.data?.username;
-    if (room && rooms[room]) {
-      rooms[room].players = rooms[room].players.filter(p => p.id !== socket.id);
-      emitToRoom(room, "players", rooms[room].players);
-      socket.leave(room);
-      socket.data.room = null;
-      activeUsers.set(username, "lobby");
-      io.emit("active_users", getActiveUserList());
-    }
-  });
+  const room = socket.data?.room;
+  const username = socket.data?.username;
+
+  if (room && rooms[room]) {
+    rooms[room].players = rooms[room].players.filter(p => p.id !== socket.id);
+    emitToRoom(room, "players", rooms[room].players);
+    socket.leave(room);
+    socket.data.room = null;
+
+    activeUsers.set(username, "lobby");
+    io.emit("active_users", getActiveUserList());
+
+    cleanupRoomIfEmpty(room); // ✅ added
+  }
+});
+
   
   socket.on("disconnect", () => {
   const username = socket.data.username;
@@ -1238,36 +1265,16 @@ socket.on("leave_room", () => {
   }
 
   if (room && rooms[room]) {
-    // Remove from room
+    // Remove player from the room
     rooms[room].players = rooms[room].players.filter(p => p.username !== username);
     emitToRoom(room, "players", rooms[room].players);
 
-    const realPlayers = rooms[room].players.filter(p => !p.username.startsWith("bot"));
-
-    // 👇 Reset room if only bots left
-    if (realPlayers.length === 0) {
-      console.log(`🧹 Resetting room ${room} (no real players left)`);
-
-      // Kill bot processes if tracked
-      if (roomBots[room]) {
-        roomBots[room].forEach(botProc => botProc.kill());
-        delete roomBots[room];
-      }
-
-      delete rooms[room];
-      delete roomSettings[room];
-      delete roomRounds[room];
-
-      io.emit("room_list", getRoomStats());
-    }
+    // Perform shared cleanup logic
+    cleanupRoomIfEmpty(room);
   }
 
   io.emit("active_users", getActiveUserList());
 });
-
-
-
-
 
 
 });
