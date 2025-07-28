@@ -19,7 +19,7 @@ const io = new Server(server, {
     credentials: true
   }
 });
-
+const path = require("path");
 const roomSettings = {
    Eighties: {
     displayName: "80's Theme",
