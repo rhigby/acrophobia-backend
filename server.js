@@ -27,7 +27,7 @@ const io = new Server(server, {
 const path = require("path");
 const { spawn } = require("child_process");
 
-const wordBank = require(`./themes/${currentTheme}.json`);
+
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -988,6 +988,7 @@ socket.on("chat_message", ({ room, text }) => {
 
 socket.on("join_room", ({ room }, callback) => {
   const currentTheme = roomSettings[room]?.theme || "general";
+  const wordBank = require(`./themes/${currentTheme}.json`);
   io.emit("room_list", getRoomStats());
 
   const username = socket.data?.username;
