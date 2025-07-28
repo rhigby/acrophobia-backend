@@ -19,13 +19,45 @@ const io = new Server(server, {
     credentials: true
   }
 });
+
 const roomSettings = {
-  CleanFun: { filterProfanity: true, type: "clean" },
-  AnythingGoes: { filterProfanity: false, type: "uncensored" },
-  TriviaNight: { filterProfanity: true, type: "clean" },
-  LateNight: { filterProfanity: false, type: "uncensored" },
-  Classroom: { filterProfanity: true, type: "clean" }
+   Eighties: {
+    displayName: "80's Theme",
+    filterProfanity: true,
+    theme: "general"
+  },
+   Ninties: {
+    displayName: "90's Theme",
+    filterProfanity: true,
+    theme: "general"
+  },
+  CleanFun: {
+    displayName: "Clean Fun",
+    filterProfanity: true,
+    theme: "general"
+  },
+  SportsArena: {
+    displayName: "Sports Arena",
+    filterProfanity: true,
+    theme: "sports"
+  },
+   AnythingGoes: {
+    displayName: "Anything Goes",
+    filterProfanity: false,
+    theme: "sports"
+  },
+    LateNight: {
+    displayName: "Late Night",
+    filterProfanity: false,
+    theme: "sports"
+  },
+   TheCouch: {
+    displayName: "The Couch",
+    filterProfanity: false,
+    theme: "sports"
+  }
 };
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false
