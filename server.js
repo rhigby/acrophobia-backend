@@ -6,8 +6,9 @@ const {
   getThemeForRoom
 } = require("./utils/profanityFilter");
 const bcrypt = require("bcrypt");
-const router = express.Router();
+
 const express = require("express");
+const router = express.Router();
 const activeUsers = new Map();
 const userRooms = {}; // Track each user's current room
 const roomRounds = {};
