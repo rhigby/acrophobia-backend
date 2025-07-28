@@ -6,7 +6,6 @@ const {
   getThemeForRoom
 } = require("./utils/profanityFilter");
 const bcrypt = require("bcrypt");
-const { pool } = require("./db"); // assuming you’re using pg.Pool
 const router = express.Router();
 const express = require("express");
 const activeUsers = new Map();
