@@ -70,25 +70,37 @@ app.get("/api/me", async (req, res) => {
 });
 
 function cleanupRoomIfEmpty(room) {
-  const players = rooms[room]?.players || [];
-  const realPlayers = players.filter(p => !p.username.startsWith("bot"));
+  const roomData = rooms[room];
+  if (!roomData) return;
+
+  const realPlayers = roomData.players.filter(p => !p.username.includes("-bot"));
 
   if (realPlayers.length === 0) {
     console.log(`🧹 Resetting room ${room} (no real players left)`);
 
-    // Kill bots
+    // Kill any bots
     if (roomBots[room]) {
       roomBots[room].forEach(botProc => botProc.kill());
       delete roomBots[room];
     }
 
+    // Remove room and related data
     delete rooms[room];
     delete roomSettings[room];
     delete roomRounds[room];
 
+    // Clean up any user mappings pointing to the deleted room
+    for (const [username, assignedRoom] of Object.entries(userRooms)) {
+      if (assignedRoom === room) {
+        delete userRooms[username];
+        activeUsers.delete(username);
+      }
+    }
+
     io.emit("room_list", getRoomStats());
   }
 }
+
 
 
 function launchBot(botName, room) {
@@ -1255,9 +1267,9 @@ socket.on("leave_room", () => {
 });
 
   
-  socket.on("disconnect", () => {
+ socket.on("disconnect", () => {
   const username = socket.data.username;
-  const room = socket.data.room;
+  const room = socket.data.room || userRooms[username]; // fallback
 
   if (username) {
     activeUsers.delete(username);
@@ -1265,16 +1277,15 @@ socket.on("leave_room", () => {
   }
 
   if (room && rooms[room]) {
-    // Remove player from the room
     rooms[room].players = rooms[room].players.filter(p => p.username !== username);
     emitToRoom(room, "players", rooms[room].players);
 
-    // Perform shared cleanup logic
     cleanupRoomIfEmpty(room);
   }
 
   io.emit("active_users", getActiveUserList());
 });
+
 
 
 });
