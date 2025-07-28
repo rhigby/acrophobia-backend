@@ -7,7 +7,7 @@ const SERVER_URL = process.env.SERVER_URL || "https://acrophobia-backend-2.onren
 const ROOM = process.env.ROOM || "room1";
 const PASSWORD = process.env.PASSWORD || "bot123";
 
-const { getThemeForRoom } = require("./utils/profanityFilter");
+const { getThemeForRoom } = require("../utils/profanityFilter");
 
 const theme = getThemeForRoom(ROOM);
 const themePath = path.join(__dirname, "bots", "themes", `${theme}.json`);
