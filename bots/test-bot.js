@@ -126,7 +126,12 @@ async function runBot(username) {
   });
 }
 
-["Bot1", "Bot2", "Bot3", "Bot4"].forEach(runBot);
+const baseNames = ["bot1", "bot2", "bot3", "bot4"];
+baseNames.forEach(base => {
+  const botUsername = `${ROOM}-${base}`;
+  runBot(botUsername);
+});
+
 
 
 
