@@ -58,6 +58,9 @@ const roomSettings = {
     theme: "anything"
   }
 };
+const { roomSettings } = require("./profanityFilter");
+const currentTheme = roomSettings[room]?.theme || "general";
+const wordBank = require(`./themes/${currentTheme}.json`);
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -93,6 +96,29 @@ app.get("/api/me", async (req, res) => {
 
   res.json({ username: result.rows[0].username });
 });
+
+const path = require("path");
+const { spawn } = require("child_process");
+
+function launchBot(botName, room) {
+  const botPath = path.join(__dirname, "bots", "test-bot.js");
+  const bot = spawn("node", [botPath, botName, room], {
+    cwd: __dirname,
+    env: { ...process.env, BOT_NAME: botName, ROOM: room }
+  });
+
+  bot.stdout.on("data", (data) => {
+    console.log(`[${botName}]: ${data}`);
+  });
+
+  bot.stderr.on("data", (data) => {
+    console.error(`[${botName} ERROR]: ${data}`);
+  });
+
+  bot.on("close", (code) => {
+    console.log(`[${botName}] exited with code ${code}`);
+  });
+}
 
 
 function safeOriginCheck(origin, callback) {
