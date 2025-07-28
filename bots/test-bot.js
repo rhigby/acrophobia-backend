@@ -10,7 +10,7 @@ const PASSWORD = process.env.PASSWORD || "bot123";
 const { getThemeForRoom } = require("../utils/profanityFilter");
 
 const theme = getThemeForRoom(ROOM);
-const themePath = path.join(__dirname, "bots", "themes", `${theme}.json`);
+const themePath = path.join(__dirname, "themes", `${theme}.json`);
 const wordBank = JSON.parse(fs.readFileSync(themePath, "utf8"));
 
 function getWordForLetter(letter, index) {
