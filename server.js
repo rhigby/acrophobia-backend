@@ -5,7 +5,9 @@ const {
   roomSettings,
   getThemeForRoom
 } = require("./utils/profanityFilter");
-
+const bcrypt = require("bcrypt");
+const { pool } = require("./db"); // assuming you’re using pg.Pool
+const router = express.Router();
 const express = require("express");
 const activeUsers = new Map();
 const userRooms = {}; // Track each user's current room
@@ -98,6 +100,42 @@ function safeOriginCheck(origin, callback) {
     callback(new Error("Invalid origin"));
   }
 }
+
+router.post("/api/register", async (req, res) => {
+  const { username, email, password } = req.body;
+
+  if (!username || !email || !password) {
+    return res.status(400).json({ message: "Missing required fields" });
+  }
+
+  try {
+    // Check if username or email exists
+    const existing = await pool.query(
+      "SELECT id FROM users WHERE username = $1 OR email = $2",
+      [username, email]
+    );
+
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ message: "Username or email already exists" });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Insert into DB
+    await pool.query(
+      "INSERT INTO users (username, email, password) VALUES ($1, $2, $3)",
+      [username, email, hashedPassword]
+    );
+
+    res.status(201).json({ success: true, message: "User registered successfully" });
+  } catch (err) {
+    console.error("Registration error:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+module.exports = router;
 
 app.post("/api/login-token", express.json(), async (req, res) => {
   const { username, password } = req.body;
