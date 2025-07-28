@@ -49,11 +49,20 @@ async function loginOrRegister(username) {
       }),
     });
 
-    if (!registerRes.ok) {
-      const err = await registerRes.json();
-      console.error(`[${username}] Registration failed: ${err.message}`);
-      throw new Error(err.message);
-    }
+const registerRes = await fetch(...);
+const contentType = registerRes.headers.get("content-type");
+
+if (!registerRes.ok) {
+  const body = await registerRes.text();
+  if (contentType && contentType.includes("application/json")) {
+    const err = JSON.parse(body);
+    console.error(`[${username}] Registration failed: ${err.message}`);
+  } else {
+    console.error(`[${username}] Registration failed. HTML or non-JSON response:\n${body}`);
+  }
+  throw new Error("Registration failed with non-JSON response");
+}
+
 
     console.log(`[${username}] Registered successfully`);
 
