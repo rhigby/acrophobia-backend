@@ -20,6 +20,7 @@ const io = new Server(server, {
   }
 });
 const path = require("path");
+const { spawn } = require("child_process");
 const roomSettings = {
    Eighties: {
     displayName: "80's Theme",
