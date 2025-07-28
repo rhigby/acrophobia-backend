@@ -994,7 +994,9 @@ socket.on("chat_message", ({ room, text }) => {
 });
 
 
-  socket.on("join_room", ({ room }, callback) => {
+ const { launchBot } = require("./testbot"); // adjust path if needed
+
+socket.on("join_room", ({ room }, callback) => {
   io.emit("room_list", getRoomStats());
 
   const username = socket.data?.username;
@@ -1006,25 +1008,25 @@ socket.on("chat_message", ({ room, text }) => {
   io.emit("active_users", getActiveUserList());
 
   if (!rooms[room]) {
-  const defaultSettings = { filterProfanity: false };
-  rooms[room] = {
-    players: [],
-    scores: {},
-    phase: "waiting",
-    round: 0,
-    entries: [],
-    votes: {},
-    acronym: "",
-    faceoff: {
-      active: false,
-      round: 0,
+    const defaultSettings = { filterProfanity: false, theme: "general" };
+    rooms[room] = {
       players: [],
-      scores: {}
-    },
-    ...defaultSettings,
-    ...roomSettings[room]  // Overrides default if settings exist
-  };
-}
+      scores: {},
+      phase: "waiting",
+      round: 0,
+      entries: [],
+      votes: {},
+      acronym: "",
+      faceoff: {
+        active: false,
+        round: 0,
+        players: [],
+        scores: {}
+      },
+      ...defaultSettings,
+      ...roomSettings[room]
+    };
+  }
 
   const r = rooms[room];
 
@@ -1040,8 +1042,16 @@ socket.on("chat_message", ({ room, text }) => {
   socket.data.room = room;
 
   r.players.push({ id: socket.id, username });
-
   emitToRoom(room, "players", r.players);
+
+  // 💡 Auto-join bots if only 1 real player
+  const realPlayers = r.players.filter(p => !p.username.startsWith("bot"));
+  if (realPlayers.length === 1) {
+    ["bot1", "bot2", "bot3"].forEach((suffix, i) => {
+      const botName = `${room}-bot${i + 1}`;
+      launchBot(botName, room);
+    });
+  }
 
   if (r.players.length >= 2 && r.phase === "waiting") {
     startGame(room);
