@@ -97,9 +97,6 @@ app.get("/api/me", async (req, res) => {
   res.json({ username: result.rows[0].username });
 });
 
-const path = require("path");
-const { spawn } = require("child_process");
-
 function launchBot(botName, room) {
   const botPath = path.join(__dirname, "bots", "test-bot.js");
   const bot = spawn("node", [botPath, botName, room], {
