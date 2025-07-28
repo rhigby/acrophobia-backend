@@ -25,66 +25,46 @@ function rand(min, max) {
 }
 
 async function loginOrRegister(username) {
-  try {
-    // Attempt login
-    const loginRes = await fetch(`${SERVER_URL}/api/login-token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password: PASSWORD }),
-    });
+  // Try to register first
+  const registerRes = await fetch(`${SERVER_URL}/api/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      username,
+      email: `${username}@test.com`,
+      password: PASSWORD
+    }),
+  });
 
-    if (loginRes.ok) {
-      const data = await loginRes.json();
-      return data.token;
-    }
-
-    console.log(`[${username}] Login failed, attempting registration`);
-
-    // Attempt registration
-    const registerRes = await fetch(`${SERVER_URL}/api/register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username,
-        email: `${username}@test.com`,
-        password: PASSWORD
-      }),
-    });
-
-    const contentType = registerRes.headers.get("content-type");
-
-    if (!registerRes.ok) {
-      const body = await registerRes.text();
-      if (contentType && contentType.includes("application/json")) {
-        const err = JSON.parse(body);
-        console.error(`[${username}] Registration failed: ${err.message}`);
-      } else {
-        console.error(`[${username}] Registration failed. HTML or non-JSON response:\n${body}`);
-      }
-      throw new Error("Registration failed");
-    }
-
+  if (registerRes.ok) {
     console.log(`[${username}] Registered successfully`);
-
-    // Try login again after successful registration
-    const loginRes2 = await fetch(`${SERVER_URL}/api/login-token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password: PASSWORD }),
-    });
-
-    if (!loginRes2.ok) {
-      throw new Error(`[${username}] Login after registration failed`);
+  } else {
+    const text = await registerRes.text();
+    if (registerRes.status !== 409) {
+      console.error(`[${username}] Registration failed:\n${text}`);
+      throw new Error("Registration failed");
+    } else {
+      console.log(`[${username}] Already registered`);
     }
-
-    const data2 = await loginRes2.json();
-    return data2.token;
-
-  } catch (e) {
-    console.error(`[${username} ERROR]: ${e.message}`);
-    throw e;
   }
+
+  // Attempt login regardless
+  const loginRes = await fetch(`${SERVER_URL}/api/login-token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password: PASSWORD }),
+  });
+
+  if (!loginRes.ok) {
+    const errText = await loginRes.text();
+    console.error(`[${username}] Login failed: ${errText}`);
+    throw new Error("Login failed");
+  }
+
+  const data = await loginRes.json();
+  return data.token;
 }
+
 
 
 async function runBot(username) {
