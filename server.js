@@ -79,10 +79,19 @@ function launchBot(botName, room) {
   if (!roomBots[room]) roomBots[room] = [];
   roomBots[room].push(bot);
 
-  bot.stdout.on("data", (data) => console.log(`[${botName}]: ${data}`));
-  bot.stderr.on("data", (data) => console.error(`[${botName} ERROR]: ${data}`));
-  bot.on("close", () => console.log(`[${botName}] exited`));
+  bot.stdout.on("data", (data) => {
+    console.log(`[${botName}]: ${data}`);
+  });
+
+  bot.stderr.on("data", (data) => {
+    console.error(`[${botName} ERROR]: ${data}`);
+  });
+
+  bot.on("close", (code) => {
+    console.log(`[${botName}] exited with code ${code}`);
+  });
 }
+
 
 
 function safeOriginCheck(origin, callback) {
