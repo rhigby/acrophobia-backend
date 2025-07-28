@@ -26,19 +26,21 @@ function rand(min, max) {
 
 async function loginOrRegister(username) {
   try {
+    // Attempt login
     const loginRes = await fetch(`${SERVER_URL}/api/login-token`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password: PASSWORD }),
     });
 
-    if (!loginRes.ok) throw new Error("Login failed");
+    if (loginRes.ok) {
+      const data = await loginRes.json();
+      return data.token;
+    }
 
-    const data = await loginRes.json();
-    return data.token;
-  } catch (e) {
     console.log(`[${username}] Login failed, attempting registration`);
 
+    // Attempt registration
     const registerRes = await fetch(`${SERVER_URL}/api/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -49,33 +51,41 @@ async function loginOrRegister(username) {
       }),
     });
 
-const registerRes = await fetch(...);
-const contentType = registerRes.headers.get("content-type");
+    const contentType = registerRes.headers.get("content-type");
 
-if (!registerRes.ok) {
-  const body = await registerRes.text();
-  if (contentType && contentType.includes("application/json")) {
-    const err = JSON.parse(body);
-    console.error(`[${username}] Registration failed: ${err.message}`);
-  } else {
-    console.error(`[${username}] Registration failed. HTML or non-JSON response:\n${body}`);
-  }
-  throw new Error("Registration failed with non-JSON response");
-}
-
+    if (!registerRes.ok) {
+      const body = await registerRes.text();
+      if (contentType && contentType.includes("application/json")) {
+        const err = JSON.parse(body);
+        console.error(`[${username}] Registration failed: ${err.message}`);
+      } else {
+        console.error(`[${username}] Registration failed. HTML or non-JSON response:\n${body}`);
+      }
+      throw new Error("Registration failed");
+    }
 
     console.log(`[${username}] Registered successfully`);
 
+    // Try login again after successful registration
     const loginRes2 = await fetch(`${SERVER_URL}/api/login-token`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password: PASSWORD }),
     });
 
+    if (!loginRes2.ok) {
+      throw new Error(`[${username}] Login after registration failed`);
+    }
+
     const data2 = await loginRes2.json();
     return data2.token;
+
+  } catch (e) {
+    console.error(`[${username} ERROR]: ${e.message}`);
+    throw e;
   }
 }
+
 
 async function runBot(username) {
   const token = await loginOrRegister(username);
