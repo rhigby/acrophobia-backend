@@ -58,7 +58,7 @@ const roomSettings = {
     theme: "anything"
   }
 };
-const { roomSettings } = require("./profanityFilter");
+const { roomSettings: predefinedRoomSettings } = require("./profanityFilter");
 const currentTheme = roomSettings[room]?.theme || "general";
 const wordBank = require(`./themes/${currentTheme}.json`);
 
