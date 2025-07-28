@@ -994,7 +994,7 @@ socket.on("chat_message", ({ room, text }) => {
 });
 
 
- const { launchBot } = require("./testbot"); // adjust path if needed
+ 
 
 socket.on("join_room", ({ room }, callback) => {
   io.emit("room_list", getRoomStats());
