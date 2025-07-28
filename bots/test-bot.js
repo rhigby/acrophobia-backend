@@ -143,11 +143,11 @@ async function runBot(username) {
 }
 
 // 👇 Prevent duplicate launch and enforce unique usernames
-const baseNames = ["bot1", "bot2", "bot3", "bot4"];
-baseNames.forEach(base => {
-  const botUsername = `${ROOM}-${base}`;
-  runBot(botUsername);
-});
+// const baseNames = ["bot1", "bot2", "bot3", "bot4"];
+// baseNames.forEach(base => {
+//   const botUsername = `${ROOM}-${base}`;
+//   runBot(botUsername);
+// });
 
 
 
