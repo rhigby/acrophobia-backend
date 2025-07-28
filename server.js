@@ -113,7 +113,7 @@ router.post("/api/register", async (req, res) => {
   try {
     // Check if username or email exists
     const existing = await pool.query(
-      "SELECT id FROM users WHERE username = $1 OR email = $2",
+       "SELECT username FROM users WHERE username = $1 OR email = $2",
       [username, email]
     );
 
