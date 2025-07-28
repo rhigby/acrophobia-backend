@@ -183,6 +183,51 @@ async function runBot(username) {
       socket.emit("join_room", { room: ROOM });
     }
   });
+async function loginOrRegister(username) {
+  try {
+    const loginRes = await fetch(`${SERVER_URL}/api/login-token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password: PASSWORD }),
+    });
+
+    if (!loginRes.ok) throw new Error("Login failed");
+
+    const data = await loginRes.json();
+    return data.token;
+  } catch (e) {
+    console.log(`[${username}] Login failed, attempting registration`);
+
+    // Try to register
+    const registerRes = await fetch(`${SERVER_URL}/api/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username,
+        email: `${username}@test.com`,
+        password: PASSWORD
+      }),
+    });
+
+    if (!registerRes.ok) {
+      const err = await registerRes.json();
+      console.error(`[${username}] Registration failed: ${err.message}`);
+      throw new Error(err.message);
+    }
+
+    console.log(`[${username}] Registered successfully`);
+
+    // Try login again after registration
+    const loginRes2 = await fetch(`${SERVER_URL}/api/login-token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password: PASSWORD }),
+    });
+
+    const data2 = await loginRes2.json();
+    return data2.token;
+  }
+}
 
   socket.on("phase", (phase) => {
     canSubmit = phase === "submit" || phase === "faceoff_submit";
