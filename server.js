@@ -146,14 +146,25 @@ app.post("/api/login-token", express.json(), async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: "Missing credentials" });
 
-  const result = await pool.query(`SELECT * FROM users WHERE username = $1 AND password = $2`, [username, password]);
-  if (result.rows.length === 0) return res.status(401).json({ error: "Invalid credentials" });
+  const userResult = await pool.query(`SELECT * FROM users WHERE username = $1`, [username]);
+
+  if (userResult.rows.length === 0) {
+    return res.status(401).json({ error: "Invalid credentials" });
+  }
+
+  const user = userResult.rows[0];
+  const passwordMatch = await bcrypt.compare(password, user.password);
+
+  if (!passwordMatch) {
+    return res.status(401).json({ error: "Invalid credentials" });
+  }
 
   const token = uuidv4();
   await pool.query(`INSERT INTO sessions (token, username) VALUES ($1, $2)`, [token, username]);
 
   res.json({ success: true, token });
 });
+
 
 app.post("/api/update-profile", express.json(), async (req, res) => {
   const auth = req.headers.authorization;
@@ -901,18 +912,27 @@ io.on("connection", (socket) => {
 
 
   socket.on("login", async ({ username, password }, callback) => {
-     console.log("📩 Login event received:", username, password);
+  console.log("📩 Login event received:", username, password);
   if (!username || !password) {
     return callback({ success: false, message: "Missing credentials" });
   }
 
   try {
+    // Fetch user by username only
     const userResult = await pool.query(
-      `SELECT * FROM users WHERE username = $1 AND password = $2`,
-      [username, password]
+      `SELECT * FROM users WHERE username = $1`,
+      [username]
     );
 
     if (userResult.rows.length === 0) {
+      return callback({ success: false, message: "Invalid credentials" });
+    }
+
+    const user = userResult.rows[0];
+
+    // Compare plaintext password to hashed one
+    const passwordMatch = await bcrypt.compare(password, user.password);
+    if (!passwordMatch) {
       return callback({ success: false, message: "Invalid credentials" });
     }
 
