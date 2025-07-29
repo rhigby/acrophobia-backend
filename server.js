@@ -936,6 +936,12 @@ io.use(async (socket, next) => {
 //   }
 //   next();
 // });
+function emitRoomStats() {
+  const stats = getRoomStats();
+  console.log("🚀 Emitting room stats:", stats);
+  io.emit("room_list", stats);
+}
+
 
 io.on("connection", (socket) => {
   console.log("Socket connected:", socket.id, "user:", socket.data.username);
@@ -1302,11 +1308,6 @@ socket.on("leave_room", () => {
   io.emit("active_users", getActiveUserList());
 });
 
-function emitRoomStats() {
-  const stats = getRoomStats();
-  console.log("🚀 Emitting room stats:", stats);
-  io.emit("room_list", stats);
-}
 
 });
 
