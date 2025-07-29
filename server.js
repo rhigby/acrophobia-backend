@@ -97,7 +97,7 @@ function cleanupRoomIfEmpty(room) {
       }
     }
 
-    io.emit("room_list", getRoomStats());
+    emitRoomStats();
   }
 }
 
@@ -1185,7 +1185,7 @@ socket.on("join_room", (data, callback) => {
   // ✅ Add to players list
   r.players.push({ id: socket.id, username });
   emitToRoom(room, "players", r.players);
-  io.emit("room_list", getRoomStats());
+ emitRoomStats();
   io.emit("active_users", getActiveUserList());
 
   // 💬 Ask if user wants bots (instead of auto-spawning)
