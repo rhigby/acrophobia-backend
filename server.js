@@ -1138,6 +1138,10 @@ socket.on("join_room", (data, callback) => {
   }
 
   if (room && room.players) {
+    console.log(`📡 Emitting room_stats for ${roomId}`, {
+      players: room.players.length,
+      botCount: room.players.filter(p => p.isBot).length,
+    });
     emitToRoom(roomId, "room_stats", {
       players: room.players.length,
       botCount: room.players.filter(p => p.isBot).length,
