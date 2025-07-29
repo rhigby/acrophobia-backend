@@ -1187,7 +1187,7 @@ socket.on("join_room", (data, callback) => {
   if (realPlayers.length === 1 && !roomBots[room]) {
     const playerSocket = io.sockets.sockets.get(socket.id);
     if (playerSocket) {
-      playerSocket.emit("prompt_add_bots"); // 👈 client should handle this and respond
+      playerSocket.emit("prompt_add_bots", { room }); // 👈 client should handle this and respond
     }
   }
 
