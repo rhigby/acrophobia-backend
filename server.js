@@ -119,7 +119,19 @@ function launchBot(botName, room) {
   roomBots[room].push(bot);
 
   bot.stdout.on("data", (data) => {
-    console.log(`[${botName}]: ${data}`);
+    const message = data.toString().trim();
+    console.log(`[${botName}]: ${message}`);
+
+    // 💬 Detect chat messages sent from the bot
+    if (message.startsWith("[BOT_CHAT]")) {
+      const chatText = message.replace("[BOT_CHAT]", "").trim();
+
+      io.to(room).emit("chat_message", {
+        username: botName,
+        text: chatText,
+        isBot: true
+      });
+    }
   });
 
   bot.stderr.on("data", (data) => {
