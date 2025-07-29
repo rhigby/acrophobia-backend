@@ -34,12 +34,12 @@ async function loginOrRegister(username) {
 
   if (loginRes.ok) {
     const data = await loginRes.json();
-    console.log(`[${username}] Logged in successfully`);
+    console.log(`[${username}] Logged in`);
     return data.token;
   }
 
   const errorText = await loginRes.text();
-  console.log(`[${username}] Login failed, trying registration. Reason: ${errorText}`);
+  console.log(`[${username}] Login failed, attempting registration: ${errorText}`);
 
   const registerRes = await fetch(`${SERVER_URL}/api/register`, {
     method: "POST",
@@ -52,27 +52,25 @@ async function loginOrRegister(username) {
   });
 
   if (registerRes.ok) {
-    console.log(`[${username}] Registered successfully`);
-  } else if (registerRes.status === 409) {
-    console.log(`[${username}] Already registered`);
+    console.log(`[${username}] Registered`);
   } else {
-    const regErr = await registerRes.text();
-    throw new Error(`[${username}] Registration failed: ${regErr}`);
+    const err = await registerRes.text();
+    throw new Error(`[${username}] Registration failed: ${err}`);
   }
 
-  const loginRes2 = await fetch(`${SERVER_URL}/api/login-token`, {
+  const retryRes = await fetch(`${SERVER_URL}/api/login-token`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, password: PASSWORD }),
   });
 
-  if (!loginRes2.ok) {
-    const err = await loginRes2.text();
+  if (!retryRes.ok) {
+    const err = await retryRes.text();
     throw new Error(`[${username}] Login after registration failed: ${err}`);
   }
 
-  const data2 = await loginRes2.json();
-  return data2.token;
+  const data = await retryRes.json();
+  return data.token;
 }
 
 async function runBot(username) {
@@ -89,6 +87,21 @@ async function runBot(username) {
     let hasVoted = false;
     let currentAcronym = null;
     let currentPhase = "";
+    let entriesReceived = [];
+
+    function voteNow(entries) {
+      const valid = entries.filter((e) => e.username !== username);
+      if (valid.length === 0) return;
+
+      const pick =
+        Math.random() < 0.7
+          ? valid.sort((a, b) => b.text.length - a.text.length)[0]
+          : valid[rand(0, valid.length - 1)];
+
+      socket.emit("vote_entry", { room: ROOM, entryId: pick.id });
+      console.log(`[${username}] ✅ Voted for: ${pick.text}`);
+      hasVoted = true;
+    }
 
     socket.on("connect", () => {
       console.log(`[${username}] Connected`);
@@ -100,89 +113,58 @@ async function runBot(username) {
       canSubmit = phase === "submit" || phase === "faceoff_submit";
       hasSubmitted = false;
       hasVoted = false;
-      console.log(`[${username}] Phase changed to: ${phase}`);
+      console.log(`[${username}] Phase: ${phase}`);
     });
 
     socket.on("acronym", (acronym) => {
       currentAcronym = acronym;
-
       if (canSubmit && !hasSubmitted) {
-        const delay = rand(6000, 9000);
-        const words = acronym
-          .toUpperCase()
-          .split("")
-          .map((letter, index) => getWordForLetter(letter, index));
+        const delay = rand(5000, 9000);
+        const words = acronym.toUpperCase().split("").map(getWordForLetter);
         const answer = words.join(" ");
-
         hasSubmitted = true;
         setTimeout(() => {
           socket.emit("submit_entry", { room: ROOM, text: answer });
-          console.log(`[${username}] Submitted (via acronym): ${answer}`);
+          console.log(`[${username}] ✍️ Submitted (acronym): ${answer}`);
         }, delay);
       }
     });
 
     socket.on("acronym_ready", () => {
       if (canSubmit && currentAcronym && !hasSubmitted) {
-        const delay = rand(5000, 10000);
-        const words = currentAcronym
-          .toUpperCase()
-          .split("")
-          .map((letter, index) => getWordForLetter(letter, index));
+        const delay = rand(6000, 10000);
+        const words = currentAcronym.toUpperCase().split("").map(getWordForLetter);
         const answer = words.join(" ");
-
         hasSubmitted = true;
         setTimeout(() => {
           socket.emit("submit_entry", { room: ROOM, text: answer });
-          console.log(`[${username}] Submitted (via acronym_ready): ${answer}`);
+          console.log(`[${username}] ✍️ Submitted (ready): ${answer}`);
         }, delay);
       }
     });
 
     socket.on("entries", (entries) => {
-      if (hasVoted || currentPhase !== "vote") return;
+      entriesReceived = entries;
 
-      const others = entries.filter((e) => e.username !== username);
-      if (others.length === 0) return;
-
-      const shouldVote = Math.random() > 0.15;
-      const voteDelay = rand(3000, 9000);
-
-      setTimeout(() => {
-        if (hasVoted || currentPhase !== "vote" || !shouldVote) {
-          if (!shouldVote) {
-            console.log(`[${username}] Skipped voting this round.`);
-            hasVoted = true;
+      if (!hasVoted && currentPhase === "vote") {
+        const delay = rand(3000, 8000);
+        setTimeout(() => {
+          if (!hasVoted && currentPhase === "vote") {
+            voteNow(entries);
           }
-          return;
-        }
-
-        const sorted = others.sort((a, b) => b.text.length - a.text.length);
-        const pick = Math.random() < 0.7 ? sorted[0] : others[rand(0, others.length - 1)];
-
-        socket.emit("vote_entry", { room: ROOM, entryId: pick.id });
-        console.log(`[${username}] Voted for: ${pick.text}`);
-        hasVoted = true;
-      }, voteDelay);
+        }, delay);
+      }
     });
 
-    // 🔁 Fallback submit check every second
+    // 🔁 Fallback loop every second
     setInterval(() => {
-      if (canSubmit && currentAcronym && !hasSubmitted) {
-        const words = currentAcronym
-          .toUpperCase()
-          .split("")
-          .map((letter, index) => getWordForLetter(letter, index));
-        const answer = words.join(" ");
-
-        hasSubmitted = true;
-        socket.emit("submit_entry", { room: ROOM, text: answer });
-        console.log(`[${username}] Submitted (via fallback): ${answer}`);
+      if (currentPhase === "vote" && !hasVoted && entriesReceived.length > 1) {
+        voteNow(entriesReceived);
       }
     }, 1000);
 
     socket.on("disconnect", () => {
-      console.log(`[${username}] Disconnected`);
+      console.log(`[${username}] ❌ Disconnected`);
     });
   } catch (err) {
     console.error(`[${username} ERROR]: ${err.message}`);
@@ -196,9 +178,10 @@ const roomName = process.env.ROOM || process.argv[3];
 if (botName && roomName) {
   runBot(botName);
 } else {
-  console.log("❌ BOT_NAME and ROOM must be set to launch a bot");
+  console.log("❌ BOT_NAME and ROOM must be set");
   process.exit(1);
 }
+
 
 
 // 👇 Prevent duplicate launch and enforce unique usernames
