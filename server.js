@@ -1284,6 +1284,7 @@ socket.on("leave_room", () => {
 
   if (room && rooms[room]) {
     rooms[room].players = rooms[room].players.filter(p => p.id !== socket.id);
+    delete rooms[room].scores[username];
     emitToRoom(room, "players", rooms[room].players);
     socket.leave(room);
     socket.data.room = null;
