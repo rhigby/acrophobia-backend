@@ -1145,6 +1145,11 @@ socket.on("join_room", (data, callback) => {
   const previousRoom = userRooms[username];
   if (previousRoom && rooms[previousRoom]) {
     rooms[previousRoom].players = rooms[previousRoom].players.filter(p => p.username !== username);
+
+    // 🧹 Clear player's score in previous room
+    delete rooms[previousRoom].scores?.[username];
+    delete rooms[previousRoom].faceoff?.scores?.[username];
+
     emitToRoom(previousRoom, "players", rooms[previousRoom].players);
   }
 
@@ -1191,7 +1196,7 @@ socket.on("join_room", (data, callback) => {
   // ✅ Add to players list
   r.players.push({ id: socket.id, username });
   emitToRoom(room, "players", r.players);
- emitRoomStats();
+  emitRoomStats();
   io.emit("active_users", getActiveUserList());
 
   // 💬 Ask if user wants bots (instead of auto-spawning)
@@ -1199,7 +1204,7 @@ socket.on("join_room", (data, callback) => {
   if (realPlayers.length === 1 && !roomBots[room]) {
     const playerSocket = io.sockets.sockets.get(socket.id);
     if (playerSocket) {
-      playerSocket.emit("prompt_add_bots", { room }); // 👈 client should handle this and respond
+      playerSocket.emit("prompt_add_bots", { room });
     }
   }
 
@@ -1210,6 +1215,7 @@ socket.on("join_room", (data, callback) => {
 
   callback?.({ success: true });
 });
+
 
 
 
