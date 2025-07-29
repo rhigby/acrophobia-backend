@@ -1328,16 +1328,16 @@ setInterval(() => {
   io.emit("active_users", userList);
 }, 5000);
 
-setInterval(() => {
-  const stats = {};
-  for (const roomName in rooms) {
-    stats[roomName] = {
-      players: rooms[roomName].players.length,
-      round: rooms[roomName].round || 0,
-    };
-  }
-  io.emit("room_list", stats);
-}, 1000);
+// setInterval(() => {
+//   const stats = {};
+//   for (const roomName in rooms) {
+//     stats[roomName] = {
+//       players: rooms[roomName].players.length,
+//       round: rooms[roomName].round || 0,
+//     };
+//   }
+//   io.emit("room_list", stats);
+// }, 1000);
 
 server.listen(3001, () => console.log("✅ Acrophobia backend running on port 3001"));
 
