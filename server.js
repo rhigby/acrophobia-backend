@@ -1211,8 +1211,12 @@ socket.on("join_room", (data, callback) => {
 
   // ▶️ Start game if ready
   if (r.players.length >= 2 && r.phase === "waiting") {
-    startGame(room);
-  }
+  setTimeout(() => {
+    if (rooms[room]?.phase === "waiting") {
+      startGame(room);
+    }
+  }, 2000); // give bots time to connect
+}
 
   callback?.({ success: true });
 });
@@ -1282,33 +1286,35 @@ socket.on("leave_room", () => {
   const room = socket.data?.room;
   const username = socket.data?.username;
 
-  if (room && rooms[room]) {
-    // 🔥 Remove from player list
-    rooms[room].players = rooms[room].players.filter(p => p.id !== socket.id);
+  if (!room || !rooms[room]) return;
 
-    // 🧼 Reset score for this player
-    if (rooms[room].scores) {
-      delete rooms[room].scores[username];
-    }
+  const r = rooms[room];
 
-    // 🔥 Also clear vote/entry data (optional safety)
-    if (rooms[room].votes) {
-      delete rooms[room].votes[username];
-    }
-    if (Array.isArray(rooms[room].entries)) {
-      rooms[room].entries = rooms[room].entries.filter(e => e.username !== username);
-    }
+  // Remove player
+  r.players = r.players.filter(p => p.id !== socket.id);
 
-    emitToRoom(room, "players", rooms[room].players);
-    socket.leave(room);
-    socket.data.room = null;
+  // Reset score and faceoff score
+  if (r.scores) delete r.scores[username];
+  if (r.faceoff?.scores) delete r.faceoff.scores[username];
 
-    activeUsers.set(username, "lobby");
-    io.emit("active_users", getActiveUserList());
-
-    cleanupRoomIfEmpty(room); // ✅
+  // Optional: also clean votes/entries
+  if (r.votes) delete r.votes[username];
+  if (Array.isArray(r.entries)) {
+    r.entries = r.entries.filter(e => e.username !== username);
   }
+
+  // Leave room and mark in lobby
+  socket.leave(room);
+  socket.data.room = null;
+  activeUsers.set(username, "lobby");
+
+  emitToRoom(room, "players", r.players);
+  io.emit("active_users", getActiveUserList());
+
+  // Force cleanup if empty
+  cleanupRoomIfEmpty(room);
 });
+
 
 
   
