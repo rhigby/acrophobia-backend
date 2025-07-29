@@ -39,7 +39,7 @@ async function loginOrRegister(username) {
   }
 
   const errorText = await loginRes.text();
-  console.log(`[${username}] Login failed, attempting registration: ${errorText}`);
+  console.log(`[${username}] Login failed, registering... (${errorText})`);
 
   const registerRes = await fetch(`${SERVER_URL}/api/register`, {
     method: "POST",
@@ -51,11 +51,9 @@ async function loginOrRegister(username) {
     }),
   });
 
-  if (registerRes.ok) {
-    console.log(`[${username}] Registered`);
-  } else {
-    const err = await registerRes.text();
-    throw new Error(`[${username}] Registration failed: ${err}`);
+  if (!registerRes.ok && registerRes.status !== 409) {
+    const regErr = await registerRes.text();
+    throw new Error(`[${username}] Registration failed: ${regErr}`);
   }
 
   const retryRes = await fetch(`${SERVER_URL}/api/login-token`, {
@@ -103,6 +101,31 @@ async function runBot(username) {
       hasVoted = true;
     }
 
+    function buildAnswer(acronym) {
+      const words = acronym.toUpperCase().split("").map((letter, index) =>
+        getWordForLetter(letter, index)
+      );
+      return words.join(" ");
+    }
+
+    function trySubmit(source) {
+      if (!canSubmit || hasSubmitted || !currentAcronym) return;
+
+      const answer = buildAnswer(currentAcronym);
+      const wordCount = answer.trim().split(/\s+/).length;
+
+      if (wordCount === currentAcronym.length) {
+        const delay = rand(4000, 9000);
+        setTimeout(() => {
+          socket.emit("submit_entry", { room: ROOM, text: answer });
+          console.log(`[${username}] ✍️ Submitted (${source}): ${answer}`);
+        }, delay);
+        hasSubmitted = true;
+      } else {
+        console.warn(`[${username}] 🚫 Invalid answer (${source}): "${answer}"`);
+      }
+    }
+
     socket.on("connect", () => {
       console.log(`[${username}] Connected`);
       socket.emit("join_room", { room: ROOM });
@@ -118,29 +141,11 @@ async function runBot(username) {
 
     socket.on("acronym", (acronym) => {
       currentAcronym = acronym;
-      if (canSubmit && !hasSubmitted) {
-        const delay = rand(5000, 9000);
-        const words = acronym.toUpperCase().split("").map(getWordForLetter);
-        const answer = words.join(" ");
-        hasSubmitted = true;
-        setTimeout(() => {
-          socket.emit("submit_entry", { room: ROOM, text: answer });
-          console.log(`[${username}] ✍️ Submitted (acronym): ${answer}`);
-        }, delay);
-      }
+      trySubmit("acronym");
     });
 
     socket.on("acronym_ready", () => {
-      if (canSubmit && currentAcronym && !hasSubmitted) {
-        const delay = rand(6000, 10000);
-        const words = currentAcronym.toUpperCase().split("").map(getWordForLetter);
-        const answer = words.join(" ");
-        hasSubmitted = true;
-        setTimeout(() => {
-          socket.emit("submit_entry", { room: ROOM, text: answer });
-          console.log(`[${username}] ✍️ Submitted (ready): ${answer}`);
-        }, delay);
-      }
+      trySubmit("ready");
     });
 
     socket.on("entries", (entries) => {
@@ -156,7 +161,7 @@ async function runBot(username) {
       }
     });
 
-    // 🔁 Fallback loop every second
+    // Fallback voting loop
     setInterval(() => {
       if (currentPhase === "vote" && !hasVoted && entriesReceived.length > 1) {
         voteNow(entriesReceived);
@@ -181,6 +186,7 @@ if (botName && roomName) {
   console.log("❌ BOT_NAME and ROOM must be set");
   process.exit(1);
 }
+
 
 
 
