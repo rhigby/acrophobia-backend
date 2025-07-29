@@ -881,14 +881,16 @@ function startFaceoffVoting(roomId) {
 
 function getRoomStats() {
   const stats = {};
-  for (const roomName in rooms) {
+  for (const [roomName, room] of Object.entries(rooms)) {
     stats[roomName] = {
-      players: rooms[roomName].players.length,
-      round: rooms[roomName].round || 0,
+      usernames: room.players.map(p => p.username),
+      round: room.round,
+      phase: room.phase
     };
   }
   return stats;
 }
+
 
 io.use(async (socket, next) => {
   const token = socket.handshake.auth?.token;
