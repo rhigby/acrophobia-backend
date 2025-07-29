@@ -16,7 +16,10 @@ const wordBank = JSON.parse(fs.readFileSync(themePath, "utf8"));
 function getWordForLetter(letter, index) {
   const upper = letter.toUpperCase();
   const bank = wordBank[upper];
-  if (!bank) return upper;
+  if (!bank) {
+    console.warn(`⚠️ No entry for letter: ${upper}`);
+    return upper;
+  }
   const pool = index % 2 === 0 ? bank.adjectives : bank.nouns;
   return pool[Math.floor(Math.random() * pool.length)];
 }
