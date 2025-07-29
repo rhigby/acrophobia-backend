@@ -1195,6 +1195,7 @@ socket.on("join_room", (data, callback) => {
 
   // ✅ Add to players list
   r.players.push({ id: socket.id, username });
+  r.scores[username] = 0;
   emitToRoom(room, "players", r.players);
   emitRoomStats();
   io.emit("active_users", getActiveUserList());
