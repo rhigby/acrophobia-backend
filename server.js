@@ -888,11 +888,13 @@ function getRoomStats() {
     stats[roomName] = {
       players: usernames.length,
       round: room.round,
-      botCount
+      botCount,
+      usernames  // 👈 Include this so frontend can break down real vs bot users
     };
   }
   return stats;
 }
+
 
 io.use(async (socket, next) => {
   const token = socket.handshake.auth?.token;
