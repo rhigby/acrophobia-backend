@@ -1283,8 +1283,22 @@ socket.on("leave_room", () => {
   const username = socket.data?.username;
 
   if (room && rooms[room]) {
+    // 🔥 Remove from player list
     rooms[room].players = rooms[room].players.filter(p => p.id !== socket.id);
-    delete rooms[room].scores[username];
+
+    // 🧼 Reset score for this player
+    if (rooms[room].scores) {
+      delete rooms[room].scores[username];
+    }
+
+    // 🔥 Also clear vote/entry data (optional safety)
+    if (rooms[room].votes) {
+      delete rooms[room].votes[username];
+    }
+    if (Array.isArray(rooms[room].entries)) {
+      rooms[room].entries = rooms[room].entries.filter(e => e.username !== username);
+    }
+
     emitToRoom(room, "players", rooms[room].players);
     socket.leave(room);
     socket.data.room = null;
@@ -1292,9 +1306,10 @@ socket.on("leave_room", () => {
     activeUsers.set(username, "lobby");
     io.emit("active_users", getActiveUserList());
 
-    cleanupRoomIfEmpty(room); // ✅ added
+    cleanupRoomIfEmpty(room); // ✅
   }
 });
+
 
   
  socket.on("disconnect", () => {
