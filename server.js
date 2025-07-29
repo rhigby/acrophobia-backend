@@ -510,10 +510,49 @@ const rooms = {};
 const MAX_PLAYERS = 10;
 const MAX_ROUNDS = 5;
 
+const LETTER_WEIGHTS = [
+  "E","E","E","E","E","E","E","E","E","E",
+  "A","A","A","A","A","A","A","A",
+  "R","R","R","R","R","R",
+  "I","I","I","I","I",
+  "O","O","O","O",
+  "T","T","T","T",
+  "N","N","N","N",
+  "S","S","S",
+  "L","L","L",
+  "C","C","C",
+  "U","U","U",
+  "D","D",
+  "P","P",
+  "M","M",
+  "H","H",
+  "G","G",
+  "B","B",
+  "F",
+  "Y",
+  "W",
+  "K",
+  "V",
+  "X",
+  "Z",
+  "J",
+  "Q"
+];
+
 function createAcronym(length) {
-  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  return Array.from({ length }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
+  const pool = [...LETTER_WEIGHTS];
+  const result = [];
+
+  while (result.length < length && pool.length > 0) {
+    const index = Math.floor(Math.random() * pool.length);
+    const letter = pool[index];
+    result.push(letter);
+    pool.splice(index, 1); // prevent repeats
+  }
+
+  return result.join("");
 }
+
 
 function emitToRoom(roomId, event, data) {
   io.to(roomId).emit(event, data);
