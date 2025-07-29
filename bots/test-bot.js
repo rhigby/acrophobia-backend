@@ -25,6 +25,10 @@ function getWordForLetter(letter, index) {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
+function say(text) {
+  console.log(`[BOT_CHAT] ${text}`);
+}
+
 function rand(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
@@ -189,6 +193,12 @@ async function runBot(username) {
       }
     }, 1000);
 
+  socket.on("results", ({ votedFor }) => {
+    if (votedFor) {
+      say(`Got my vote (${votedFor})`);
+    }
+  });
+    
     socket.on("disconnect", () => {
       console.log(`[${username}] ❌ Disconnected`);
     });
