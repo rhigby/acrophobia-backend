@@ -142,15 +142,15 @@ async function runBot(username) {
       console.log(`[${username}] Phase: ${phase}`);
     });
 
-    socket.on("acronym", (acronym) => {
-      currentAcronym = acronym;
-      trySubmit("acronym");
-    });
+   socket.on("acronym", (acronym) => {
+    currentAcronym = acronym;
+    console.log(`[${username}] Received acronym: ${acronym}`);
+    // defer submission until "acronym_ready"
+  });
 
-    socket.on("acronym_ready", () => {
-      trySubmit("ready");
-    });
-
+  socket.on("acronym_ready", () => {
+    trySubmit("acronym_ready");
+  });
     socket.on("entries", (entries) => {
       entriesReceived = entries;
 
