@@ -882,15 +882,17 @@ function startFaceoffVoting(roomId) {
 function getRoomStats() {
   const stats = {};
   for (const [roomName, room] of Object.entries(rooms)) {
+    const usernames = room.players.map(p => p.username);
+    const botCount = usernames.filter(name => name.startsWith(`${roomName}-bot`)).length;
+
     stats[roomName] = {
-      usernames: room.players.map(p => p.username),
+      players: usernames.length,
       round: room.round,
-      phase: room.phase
+      botCount
     };
   }
   return stats;
 }
-
 
 io.use(async (socket, next) => {
   const token = socket.handshake.auth?.token;
