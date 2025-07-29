@@ -113,15 +113,25 @@ async function runBot(username) {
 
     function trySubmit(source) {
       if (!canSubmit || hasSubmitted || !currentAcronym) return;
-
-      const answer = buildAnswer(currentAcronym);
+    
+      const letters = currentAcronym.trim().toUpperCase().split("");
+      if (letters.length < 2) {
+        console.warn(`[${username}] ❌ Skipping acronym too short: ${currentAcronym}`);
+        return;
+      }
+    
+      const words = letters.map((letter, index) => getWordForLetter(letter, index));
+      const answer = words.join(" ");
       const wordCount = answer.trim().split(/\s+/).length;
-
-      if (wordCount === currentAcronym.length) {
-        const delay = rand(4000, 9000);
+    
+      if (wordCount === letters.length) {
+        const minDelay = 10000 + (currentRound - 1) * 5000;
+        const maxDelay = 25000 + (currentRound - 1) * 5000;
+        const delay = rand(minDelay, maxDelay);
+    
         setTimeout(() => {
           socket.emit("submit_entry", { room: ROOM, text: answer });
-          console.log(`[${username}] ✍️ Submitted (${source}): ${answer}`);
+          console.log(`[${username}] ✍️ Submitted (${source}): ${answer} after ${delay}ms`);
         }, delay);
         hasSubmitted = true;
       } else {
