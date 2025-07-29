@@ -125,23 +125,34 @@ async function runBot(username) {
     });
 
     socket.on("entries", (entries) => {
-        entriesReceived = entries;
-      
-        if (hasVoted || currentPhase !== "vote") return;
-      
-        const others = entries.filter(e => e.username !== username);
-        if (others.length === 0) return;
-      
-        // Wait a bit before voting to simulate deliberation
-        setTimeout(() => {
-          if (hasVoted || currentPhase !== "vote") return; // double-check after delay
-      
-          const pick = others[Math.floor(Math.random() * others.length)];
-          socket.emit("vote_entry", { room: ROOM, entryId: pick.id });
-          console.log(`[${username}] Voted for: ${pick.text}`);
-          hasVoted = true;
-        }, rand(3000, 8000)); // Vote delay: 3–8 seconds
-      });
+  if (hasVoted || currentPhase !== "vote") return;
+
+  // Filter out bot's own entry
+  const others = entries.filter(e => e.username !== username);
+  if (others.length === 0) return;
+
+  const shouldVote = Math.random() > 0.15; // 85% chance to vote
+  const voteDelay = rand(3000, 9000); // delay between 3–9 sec
+
+  setTimeout(() => {
+    if (hasVoted || currentPhase !== "vote" || !shouldVote) {
+      if (!shouldVote) {
+        console.log(`[${username}] Skipped voting this round.`);
+        hasVoted = true;
+      }
+      return;
+    }
+
+    // Smarter choice: 70% chance to pick the longest entry, else random
+    const sorted = others.sort((a, b) => b.text.length - a.text.length);
+    const pick = Math.random() < 0.7 ? sorted[0] : others[rand(0, others.length - 1)];
+
+    socket.emit("vote_entry", { room: ROOM, entryId: pick.id });
+    console.log(`[${username}] Voted for: ${pick.text}`);
+    hasVoted = true;
+  }, voteDelay);
+});
+
 
     socket.on("disconnect", () => {
       console.log(`[${username}] Disconnected`);
