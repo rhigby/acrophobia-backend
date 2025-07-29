@@ -1130,28 +1130,12 @@ socket.on("confirm_add_bots", ({ room, count = 3 }) => {
  
 
 socket.on("join_room", (data, callback) => {
-  const room = data?.room;
+  const roomId = data?.room;
   const username = socket.data?.username;
 
-  if (!username || !room) {
+  if (!username || !roomId) {
     return callback?.({ success: false, message: "Unauthorized or missing room" });
   }
-
-  if (room && room.players) {
-    console.log(`📡 Emitting room_stats for ${roomId}`, {
-      players: room.players.length,
-      botCount: room.players.filter(p => p.isBot).length,
-    });
-    emitToRoom(roomId, "room_list", {
-      players: room.players.length,
-      botCount: room.players.filter(p => p.isBot).length,
-      usernames: room.players.map(p => p.username),
-    });
-  }
-  
-  const currentTheme = getThemeForRoom(room);
-  const themePath = path.join(__dirname, "bots", "themes", `${currentTheme}.json`);
-  const wordBank = require(themePath);
 
   // 🔄 Clean up previous room (if any)
   const previousRoom = userRooms[username];
@@ -1166,15 +1150,15 @@ socket.on("join_room", (data, callback) => {
   }
 
   // 🗂 Assign to new room
-  userRooms[username] = room;
-  activeUsers.set(username, room);
-  socket.data.room = room;
-  socket.join(room);
+  userRooms[username] = roomId;
+  activeUsers.set(username, roomId);
+  socket.data.room = roomId;
+  socket.join(roomId);
 
   // 📦 Initialize room if not exists
-  if (!rooms[room]) {
+  if (!rooms[roomId]) {
     const defaultSettings = { filterProfanity: false, theme: "general" };
-    rooms[room] = {
+    rooms[roomId] = {
       players: [],
       scores: {},
       phase: "waiting",
@@ -1189,49 +1173,59 @@ socket.on("join_room", (data, callback) => {
         scores: {}
       },
       ...defaultSettings,
-      ...roomSettings[room]
+      ...roomSettings[roomId]
     };
   }
 
-  const r = rooms[room];
+  const room = rooms[roomId];
 
   // ❌ Prevent rejoining same room
-  if (r.players.find(p => p.username === username)) {
+  if (room.players.find(p => p.username === username)) {
     return callback?.({ success: false, message: "User already in room" });
   }
 
   // ❌ Prevent overfilling
-  if (r.players.length >= MAX_PLAYERS) {
+  if (room.players.length >= MAX_PLAYERS) {
     return callback?.({ success: false, message: "Room is full" });
   }
 
   // ✅ Add to players list
-  r.players.push({ id: socket.id, username });
-  r.scores[username] = 0;
-  emitToRoom(room, "players", r.players);
+  room.players.push({ id: socket.id, username });
+  room.scores[username] = 0;
+
+  emitToRoom(roomId, "players", room.players);
+
+  // ✅ Emit room_list here (after players are initialized)
+  emitToRoom(roomId, "room_list", {
+    players: room.players.length,
+    botCount: room.players.filter(p => p.isBot).length,
+    usernames: room.players.map(p => p.username),
+  });
+
   emitRoomStats();
   io.emit("active_users", getActiveUserList());
 
   // 💬 Ask if user wants bots (instead of auto-spawning)
-  const realPlayers = r.players.filter(p => !p.username.startsWith("bot"));
-  if (realPlayers.length === 1 && !roomBots[room]) {
+  const realPlayers = room.players.filter(p => !p.username.startsWith("bot"));
+  if (realPlayers.length === 1 && !roomBots[roomId]) {
     const playerSocket = io.sockets.sockets.get(socket.id);
     if (playerSocket) {
-      playerSocket.emit("prompt_add_bots", { room });
+      playerSocket.emit("prompt_add_bots", { room: roomId });
     }
   }
 
   // ▶️ Start game if ready
-  if (r.players.length >= 2 && r.phase === "waiting") {
-  setTimeout(() => {
-    if (rooms[room]?.phase === "waiting") {
-      startGame(room);
-    }
-  }, 2000); // give bots time to connect
-}
+  if (room.players.length >= 2 && room.phase === "waiting") {
+    setTimeout(() => {
+      if (rooms[roomId]?.phase === "waiting") {
+        startGame(roomId);
+      }
+    }, 2000); // give bots time to connect
+  }
 
   callback?.({ success: true });
 });
+
 
 
 
