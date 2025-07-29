@@ -1306,6 +1306,7 @@ socket.on("leave_room", () => {
 
   if (room && rooms[room]) {
     rooms[room].players = rooms[room].players.filter(p => p.username !== username);
+    delete rooms[room].scores?.[username]; // 👈 Optional fallback
     emitToRoom(room, "players", rooms[room].players);
 
     cleanupRoomIfEmpty(room);
