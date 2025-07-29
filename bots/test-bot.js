@@ -91,6 +91,8 @@ async function runBot(username) {
     let canSubmit = false;
     let hasVoted = false;
     let currentAcronym = null;
+    let currentPhase = "";
+    let entriesReceived = [];
 
     socket.on("connect", () => {
       console.log(`[${username}] Connected`);
@@ -98,8 +100,10 @@ async function runBot(username) {
     });
 
     socket.on("phase", (phase) => {
+      currentPhase = phase;
       canSubmit = phase === "submit" || phase === "faceoff_submit";
       hasVoted = false;
+      entriesReceived = []; // Clear previous entries
       console.log(`[${username}] Phase changed to: ${phase}`);
     });
 
@@ -121,17 +125,23 @@ async function runBot(username) {
     });
 
     socket.on("entries", (entries) => {
-      if (hasVoted) return;
-      const others = entries.filter(e => e.username !== username);
-      if (others.length > 0) {
-        const pick = others[Math.floor(Math.random() * others.length)];
-        hasVoted = true;
+        entriesReceived = entries;
+      
+        if (hasVoted || currentPhase !== "vote") return;
+      
+        const others = entries.filter(e => e.username !== username);
+        if (others.length === 0) return;
+      
+        // Wait a bit before voting to simulate deliberation
         setTimeout(() => {
+          if (hasVoted || currentPhase !== "vote") return; // double-check after delay
+      
+          const pick = others[Math.floor(Math.random() * others.length)];
           socket.emit("vote_entry", { room: ROOM, entryId: pick.id });
           console.log(`[${username}] Voted for: ${pick.text}`);
-        }, rand(20000, 50000));
-      }
-    });
+          hasVoted = true;
+        }, rand(3000, 8000)); // Vote delay: 3–8 seconds
+      });
 
     socket.on("disconnect", () => {
       console.log(`[${username}] Disconnected`);
