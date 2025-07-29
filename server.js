@@ -1099,21 +1099,21 @@ socket.on("chat_message", ({ room, text }) => {
   io.to(room).emit("chat_message", { username, text });
 });
 
-socket.on("confirm_add_bots", (room) => {
-  if (!rooms[room]) return;
-  if (roomBots[room]) return; // bots already present
+socket.on("confirm_add_bots", ({ room, count = 3 }) => {
+  if (!room || !rooms[room] || count < 3 || count > 7) return;
 
   const existingNames = new Set(rooms[room].players.map(p => p.username));
   roomBots[room] = [];
 
-  ["bot1", "bot2", "bot3"].forEach((suffix, i) => {
-    const botName = `${room}-bot${i + 1}`;
+  for (let i = 1; i <= count; i++) {
+    const botName = `${room}-bot${i}`;
     if (!existingNames.has(botName)) {
       const bot = launchBot(botName, room);
       if (bot) roomBots[room].push(bot);
     }
-  });
+  }
 });
+
 
  
 
