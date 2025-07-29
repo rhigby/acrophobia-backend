@@ -112,17 +112,29 @@ async function runBot(username) {
     });
 
     socket.on("acronym_ready", async () => {
-      if (!canSubmit || !currentAcronym) return;
-      const letters = currentAcronym.toUpperCase().split("");
-      const words = letters.map((letter, index) => getWordForLetter(letter, index));
-      const answer = words.join(" ");
+  if (!canSubmit || !currentAcronym) return;
 
-      setTimeout(() => {
-        socket.emit("submit_entry", { room: ROOM, text: answer });
-        console.log(`[${username}] Submitted: ${answer} [${currentAcronym}]`);
-        canSubmit = false;
-      }, rand(20000, 40000));
-    });
+  const round = currentRound || 1;
+  const baseDelay = 5000; // minimum of 5 seconds
+  const perRoundIncrement = 10000; // 10 seconds per round after round 1
+
+  // ⏳ Example:
+  // Round 1 = 15s max, Round 2 = 25s max, etc.
+  const maxDelay = baseDelay + (round * perRoundIncrement);
+
+  const letters = currentAcronym.toUpperCase().split("");
+  const words = letters.map((letter, index) => getWordForLetter(letter, index));
+  const answer = words.join(" ");
+
+  const delay = rand(5000, maxDelay);
+
+  setTimeout(() => {
+    socket.emit("submit_entry", { room: ROOM, text: answer });
+    console.log(`[${username}] Submitted: ${answer} [${currentAcronym}] after ${delay}ms`);
+    canSubmit = false;
+  }, delay);
+});
+
 
     socket.on("entries", (entries) => {
   if (hasVoted || currentPhase !== "vote") return;
