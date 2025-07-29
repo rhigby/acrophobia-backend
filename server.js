@@ -1137,6 +1137,14 @@ socket.on("join_room", (data, callback) => {
     return callback?.({ success: false, message: "Unauthorized or missing room" });
   }
 
+  if (room && room.players) {
+    emitToRoom(roomId, "room_stats", {
+      players: room.players.length,
+      botCount: room.players.filter(p => p.isBot).length,
+      usernames: room.players.map(p => p.username),
+    });
+  }
+  
   const currentTheme = getThemeForRoom(room);
   const themePath = path.join(__dirname, "bots", "themes", `${currentTheme}.json`);
   const wordBank = require(themePath);
