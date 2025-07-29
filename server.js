@@ -1167,20 +1167,14 @@ socket.on("join_room", (data, callback) => {
   io.emit("room_list", getRoomStats());
   io.emit("active_users", getActiveUserList());
 
-  // 🤖 Auto-join bots if only 1 real player
-  const existingBotNames = new Set(r.players.map(p => p.username));
+  // 💬 Ask if user wants bots (instead of auto-spawning)
   const realPlayers = r.players.filter(p => !p.username.startsWith("bot"));
   if (realPlayers.length === 1 && !roomBots[room]) {
-  roomBots[room] = [];
-
-  ["bot1", "bot2", "bot3"].forEach((suffix, i) => {
-    const botName = `${room}-bot${i + 1}`;
-    if (!existingBotNames.has(botName)) {
-      const bot = launchBot(botName, room);
-      if (bot) roomBots[room].push(bot);
+    const playerSocket = io.sockets.sockets.get(socket.id);
+    if (playerSocket) {
+      playerSocket.emit("prompt_add_bots"); // 👈 client should handle this and respond
     }
-  });
-}
+  }
 
   // ▶️ Start game if ready
   if (r.players.length >= 2 && r.phase === "waiting") {
@@ -1189,6 +1183,7 @@ socket.on("join_room", (data, callback) => {
 
   callback?.({ success: true });
 });
+
 
 
 
