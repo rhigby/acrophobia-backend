@@ -1205,11 +1205,7 @@ socket.on("join_room", (data, callback) => {
   callback?.({ success: true });
 });
 
-function emitRoomStats() {
-  const stats = getRoomStats();
-  console.log("🚀 Emitting room stats:", stats);
-  io.emit("room_list", stats);
-}
+
 
 
   socket.on("submit_entry", ({ room, text }) => {
@@ -1306,7 +1302,11 @@ socket.on("leave_room", () => {
   io.emit("active_users", getActiveUserList());
 });
 
-
+function emitRoomStats() {
+  const stats = getRoomStats();
+  console.log("🚀 Emitting room stats:", stats);
+  io.emit("room_list", stats);
+}
 
 });
 
