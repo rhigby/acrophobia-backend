@@ -1142,7 +1142,7 @@ socket.on("join_room", (data, callback) => {
       players: room.players.length,
       botCount: room.players.filter(p => p.isBot).length,
     });
-    emitToRoom(roomId, "room_stats", {
+    emitToRoom(roomId, "room_list", {
       players: room.players.length,
       botCount: room.players.filter(p => p.isBot).length,
       usernames: room.players.map(p => p.username),
