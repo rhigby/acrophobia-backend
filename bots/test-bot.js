@@ -13,6 +13,7 @@ const theme = getThemeForRoom(ROOM);
 const themePath = path.join(__dirname, "themes", `${theme}.json`);
 const wordBank = JSON.parse(fs.readFileSync(themePath, "utf8"));
 
+
 function getWordForLetter(letter, index) {
   const upper = letter.toUpperCase();
   const bank = wordBank[upper];
@@ -89,6 +90,13 @@ async function runBot(username) {
     let currentAcronym = null;
     let currentPhase = "";
     let entriesReceived = [];
+    let currentRound = 1;
+
+    socket.on("round_number", (round) => {
+      currentRound = round;
+      console.log(`[${username}] 📢 Received round_number: ${round}`);
+    });
+
 
     function voteNow(entries) {
       const valid = entries.filter((e) => e.username !== username);
