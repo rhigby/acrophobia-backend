@@ -117,7 +117,7 @@ async function runBot(username) {
         socket.emit("submit_entry", { room: ROOM, text: answer });
         console.log(`[${username}] Submitted: ${answer} [${currentAcronym}]`);
         canSubmit = false;
-      }, rand(1000, 3000));
+      }, rand(20000, 40000));
     });
 
     socket.on("entries", (entries) => {
@@ -129,7 +129,7 @@ async function runBot(username) {
         setTimeout(() => {
           socket.emit("vote_entry", { room: ROOM, entryId: pick.id });
           console.log(`[${username}] Voted for: ${pick.text}`);
-        }, rand(1000, 3000));
+        }, rand(20000, 50000));
       }
     });
 
