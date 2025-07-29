@@ -1099,6 +1099,21 @@ socket.on("chat_message", ({ room, text }) => {
   io.to(room).emit("chat_message", { username, text });
 });
 
+socket.on("confirm_add_bots", (room) => {
+  if (!rooms[room]) return;
+  if (roomBots[room]) return; // bots already present
+
+  const existingNames = new Set(rooms[room].players.map(p => p.username));
+  roomBots[room] = [];
+
+  ["bot1", "bot2", "bot3"].forEach((suffix, i) => {
+    const botName = `${room}-bot${i + 1}`;
+    if (!existingNames.has(botName)) {
+      const bot = launchBot(botName, room);
+      if (bot) roomBots[room].push(bot);
+    }
+  });
+});
 
  
 
