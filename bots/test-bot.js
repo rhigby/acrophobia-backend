@@ -2,23 +2,28 @@ const { io } = require("socket.io-client");
 const path = require("path");
 const fs = require("fs");
 const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
-const chatLines = require("./chatDictionary");
 
 const SERVER_URL = process.env.SERVER_URL || "https://acrophobia-backend-2.onrender.com";
 const ROOM = process.env.ROOM || "room1";
 const PASSWORD = process.env.PASSWORD || "bot123";
 
 const { getThemeForRoom } = require("../utils/profanityFilter");
+const {
+  greetings,
+  submitTaunts,
+  voteReactions,
+  resultReactions,
+} = require("./chatDictionary");
 
 const theme = getThemeForRoom(ROOM);
 const themePath = path.join(__dirname, "themes", `${theme}.json`);
 const wordBank = JSON.parse(fs.readFileSync(themePath, "utf8"));
 
-let usedChatLines = {
+const usedChatLines = {
   greetings: new Set(),
+  submitTaunts: new Set(),
   voteReactions: new Set(),
   resultReactions: new Set(),
-  submitTaunts: new Set()
 };
 
 function sendChat(socket, text) {
@@ -26,21 +31,21 @@ function sendChat(socket, text) {
     room: ROOM,
     username: botName,
     text,
-    isBot: true
+    isBot: true,
   });
 }
 
 function randomLine(category, player = "") {
-  const lines = chatLines[category];
+  const lines = { greetings, submitTaunts, voteReactions, resultReactions }[category];
   const used = usedChatLines[category];
 
-  const unused = lines.filter(line => !used.has(line));
+  const unused = lines.filter((line) => !used.has(line));
   const chosen = unused.length
     ? unused[Math.floor(Math.random() * unused.length)]
     : lines[Math.floor(Math.random() * lines.length)];
 
   used.add(chosen);
-  return chosen.replace("{player}", player);
+  return typeof chosen === "function" ? chosen(player) : chosen;
 }
 
 function getWordForLetter(letter, index) {
@@ -139,7 +144,7 @@ async function runBot(username) {
         Math.random() < 0.7
           ? valid.sort((a, b) => b.text.length - a.text.length)[0]
           : valid[rand(0, valid.length - 1)];
-      
+
       votedForUser = pick.username;
 
       socket.emit("vote_entry", { room: ROOM, entryId: pick.id });
@@ -156,22 +161,22 @@ async function runBot(username) {
 
     function trySubmit(source) {
       if (!canSubmit || hasSubmitted || !currentAcronym) return;
-    
+
       const letters = currentAcronym.trim().toUpperCase().split("");
       if (letters.length < 2) {
         console.warn(`[${username}] ❌ Skipping acronym too short: ${currentAcronym}`);
         return;
       }
-    
+
       const words = letters.map((letter, index) => getWordForLetter(letter, index));
       const answer = words.join(" ");
       const wordCount = answer.trim().split(/\s+/).length;
-    
+
       if (wordCount === letters.length) {
         const minDelay = 10000 + (currentRound - 1) * 5000;
         const maxDelay = 25000 + (currentRound - 1) * 5000;
         const delay = rand(minDelay, maxDelay);
-    
+
         setTimeout(() => {
           socket.emit("submit_entry", { room: ROOM, text: answer });
           console.log(`[${username}] ✍️ Submitted (${source}): ${answer} after ${delay}ms`);
@@ -185,6 +190,9 @@ async function runBot(username) {
     socket.on("connect", () => {
       console.log(`[${username}] Connected`);
       socket.emit("join_room", { room: ROOM });
+      setTimeout(() => {
+        sendChat(socket, randomLine("greetings"));
+      }, rand(1000, 5000));
     });
 
     socket.on("phase", (phase) => {
@@ -192,36 +200,37 @@ async function runBot(username) {
       canSubmit = phase === "submit" || phase === "faceoff_submit";
       hasSubmitted = false;
       hasVoted = false;
-     if (phase === "submit") {
-    // Reset used chat lines each round
-    for (const key in usedChatLines) {
-      usedChatLines[key].clear();
-    }
 
-    // Random chat entry (taunt)
-    setTimeout(() => {
-      sendChat(socket, randomLine("submitTaunts"));
-    }, rand(3000, 7000));
-  }
+      if (phase === "submit") {
+        for (const key in usedChatLines) usedChatLines[key].clear();
+        setTimeout(() => {
+          sendChat(socket, randomLine("submitTaunts"));
+        }, rand(3000, 7000));
+      }
 
-  if (phase === "results" && votedForUser) {
-    setTimeout(() => {
-      sendChat(socket, randomLine("voteReactions", votedForUser));
-      votedForUser = null;
-    }, rand(1000, 4000));
-  }
+      if (phase === "results" && votedForUser) {
+        setTimeout(() => {
+          sendChat(socket, randomLine("voteReactions", votedForUser));
+          votedForUser = null;
+        }, rand(1000, 4000));
+
+        setTimeout(() => {
+          sendChat(socket, randomLine("resultReactions"));
+        }, rand(4000, 9000));
+      }
+
       console.log(`[${username}] Phase: ${phase}`);
     });
 
-   socket.on("acronym", (acronym) => {
-    currentAcronym = acronym;
-    console.log(`[${username}] Received acronym: ${acronym}`);
-    // defer submission until "acronym_ready"
-  });
+    socket.on("acronym", (acronym) => {
+      currentAcronym = acronym;
+      console.log(`[${username}] Received acronym: ${acronym}`);
+    });
 
-  socket.on("acronym_ready", () => {
-    trySubmit("acronym_ready");
-  });
+    socket.on("acronym_ready", () => {
+      trySubmit("acronym_ready");
+    });
+
     socket.on("entries", (entries) => {
       entriesReceived = entries;
 
@@ -235,19 +244,12 @@ async function runBot(username) {
       }
     });
 
-    // Fallback voting loop
     setInterval(() => {
       if (currentPhase === "vote" && !hasVoted && entriesReceived.length > 1) {
         voteNow(entriesReceived);
       }
     }, 1000);
 
-  socket.on("results", ({ votedFor }) => {
-    if (votedFor) {
-      say(`Got my vote (${votedFor})`);
-    }
-  });
-    
     socket.on("disconnect", () => {
       console.log(`[${username}] ❌ Disconnected`);
     });
