@@ -8,7 +8,7 @@ const DICTIONARY = new Set(
   (Array.isArray(wordList) ? wordList : [])
     .filter(w => typeof w === "string" && w.length <= 10 && !w.endsWith("s") && /^[a-zA-Z]+$/.test(w))
 );
-console.log(wordList);
+
 const SERVER_URL = process.env.SERVER_URL || "https://acrophobia-backend-2.onrender.com";
 const ROOM = process.env.ROOM || "room1";
 const PASSWORD = process.env.PASSWORD || "bot123";
@@ -72,7 +72,7 @@ function getWordForLetter(letter, index) {
 
   const dictSample = dictPool.filter(w => typeof w === "string" && w.length <= 10 && /^[a-zA-Z]+$/.test(w));
   const themeSample = themePool.filter(w => typeof w === "string" && w.length <= 10 && /^[a-zA-Z]+$/.test(w));
-
+console.log(dictSample);
   const combinedPool = [...dictSample, ...themeSample];
 
   if (combinedPool.length === 0) {
