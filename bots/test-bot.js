@@ -4,7 +4,7 @@ const fs = require("fs");
 const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
 const { english } = require("wordlist-english");
 const wordList = english["10"] || [];
-const DICTIONARY = new Set((Array.isArray(wordList) ? wordList : []).filter(w => typeof w === "string" && w.length <= 10 && !w.endsWith('s')));
+const DICTIONARY = new Set((Array.isArray(wordList) ? wordList : []).flat().filter(w => typeof w === "string" && w.length <= 10 && !w.endsWith('s')));
 
 const SERVER_URL = process.env.SERVER_URL || "https://acrophobia-backend-2.onrender.com";
 const ROOM = process.env.ROOM || "room1";
@@ -67,33 +67,37 @@ function getWordForLetter(letter, index) {
   const dictPool = wordMapByLetter[upper] || [];
   const themePool = Array.isArray(wordBank[upper]) ? wordBank[upper] : [];
 
-  const combinedPool = [...new Set([
-    ...themePool.filter(w => typeof w === "string"),
-    ...dictPool.filter(w => typeof w === "string")
-  ])].filter(w => w.length <= 10 && /^[a-zA-Z]+$/.test(w));
+  const dictSample = dictPool.filter(w => w.length <= 10 && /^[a-zA-Z]+$/.test(w));
+  const themeSample = themePool.filter(w => typeof w === "string" && w.length <= 10 && /^[a-zA-Z]+$/.test(w));
 
-  if (combinedPool.length === 0) {
-    console.warn(`⚠️ No words found at all for letter: ${upper}`);
-    return upper;
+  const pool = [];
+  const maxLen = Math.max(dictSample.length, themeSample.length);
+
+  for (let i = 0; i < maxLen; i++) {
+    if (themeSample[i] && Math.random() < 0.6) pool.push(themeSample[i]);
+    else if (dictSample[i]) pool.push(dictSample[i]);
   }
 
-  // Grammar preference
   const adjRegex = /ly$|ous$|ive$|ful$|ic$|al$/;
-  const isAdj = index % 2 === 0;
+  const grammarIsAdjective = index % 2 === 0;
 
-  // 1. Grammar + length filter
-  let filtered = combinedPool.filter(w => isAdj ? adjRegex.test(w) : !adjRegex.test(w));
+  let filtered = grammarIsAdjective
+    ? pool.filter(w => w.match(adjRegex))
+    : pool.filter(w => !w.match(adjRegex));
 
-  // 2. Relax grammar if nothing found
   if (filtered.length === 0) {
-    console.warn(`🪂 Relaxed grammar filter for ${upper}`);
-    filtered = combinedPool;
+    console.warn(`🪂 Fallback to non-grammar pool for letter: ${upper}`);
+    filtered = pool;
+  }
+
+  if (filtered.length === 0) {
+    console.warn(`⚠️ No usable words for letter: ${upper}`);
+    return upper;
   }
 
   const word = filtered[Math.floor(Math.random() * filtered.length)];
   return word.charAt(0).toUpperCase() + word.slice(1);
 }
-
 
 function say(text) {
   console.log(`[BOT_CHAT] ${text}`);
