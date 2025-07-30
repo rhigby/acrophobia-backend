@@ -4,6 +4,10 @@ const fs = require("fs");
 const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
 const { english } = require("wordlist-english");
 const wordList = english["english"] || [];
+
+console.log("📦 Loaded wordList sample:", wordList.slice(0, 20));
+console.log("📦 Total words in wordList:", Array.isArray(wordList) ? wordList.length : "Not an array");
+
 const DICTIONARY = new Set(
   (Array.isArray(wordList) ? wordList : [])
     .filter(w => typeof w === "string" && w.length <= 10 && !w.endsWith("s") && /^[a-zA-Z]+$/.test(w))
@@ -22,8 +26,8 @@ const wordBank = JSON.parse(fs.readFileSync(themePath, "utf8"));
 
 const wordMapByLetter = {};
 for (let word of DICTIONARY) {
-  console.log(word);
-  const first = word[0].toUpperCase();
+  const first = word[0]?.toUpperCase();
+  if (!first || !/^[A-Z]$/.test(first)) continue;
   if (!wordMapByLetter[first]) wordMapByLetter[first] = [];
   wordMapByLetter[first].push(word);
 }
@@ -73,7 +77,7 @@ function getWordForLetter(letter, index) {
 
   const dictSample = dictPool.filter(w => typeof w === "string" && w.length <= 10 && /^[a-zA-Z]+$/.test(w));
   const themeSample = themePool.filter(w => typeof w === "string" && w.length <= 10 && /^[a-zA-Z]+$/.test(w));
-//console.log(dictPool);
+
   const combinedPool = [...dictSample, ...themeSample];
 
   if (combinedPool.length === 0) {
