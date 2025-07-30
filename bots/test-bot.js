@@ -3,7 +3,7 @@ const path = require("path");
 const fs = require("fs");
 const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
 const { english } = require("wordlist-english");
-const wordList = english["english"] || [];
+const wordList = english["english/60"] || [];
 
 console.log("📦 Loaded wordList sample:", wordList.slice(0, 20));
 console.log("📦 Total words in wordList:", Array.isArray(wordList) ? wordList.length : "Not an array");
