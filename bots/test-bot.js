@@ -2,8 +2,8 @@ const { io } = require("socket.io-client");
 const path = require("path");
 const fs = require("fs");
 const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
-const englishWords = require("an-array-of-english-words");
-const DICTIONARY = new Set(englishWords.map(word => word.toLowerCase()));
+const englishWords = require("word-list-english");
+const DICTIONARY = new Set(englishWords["english-words-10"]);
 
 const SERVER_URL = process.env.SERVER_URL || "https://acrophobia-backend-2.onrender.com";
 const ROOM = process.env.ROOM || "room1";
@@ -15,6 +15,13 @@ const chatLines = require("./chatDictionary");
 const theme = getThemeForRoom(ROOM);
 const themePath = path.join(__dirname, "themes", `${theme}.json`);
 const wordBank = JSON.parse(fs.readFileSync(themePath, "utf8"));
+
+const wordMapByLetter = {};
+for (let word of DICTIONARY) {
+  const first = word[0].toUpperCase();
+  if (!wordMapByLetter[first]) wordMapByLetter[first] = [];
+  wordMapByLetter[first].push(word);
+}
 
 const usedChatLinesGlobal = {
   greetings: new Set(),
@@ -56,13 +63,15 @@ function randomLine(category, player = "") {
 
 function getWordForLetter(letter, index) {
   const upper = letter.toUpperCase();
-  const bank = wordBank[upper];
-  if (!bank) {
-    console.warn(`⚠️ No entry for letter: ${upper}`);
+  const pool = wordMapByLetter[upper] || [];
+
+  if (pool.length === 0) {
+    console.warn(`⚠️ No dictionary words found for letter: ${upper}`);
     return upper;
   }
-  const pool = index % 2 === 0 ? bank.adjectives : bank.nouns;
-  return pool[Math.floor(Math.random() * pool.length)];
+
+  const word = pool[Math.floor(Math.random() * pool.length)];
+  return word.charAt(0).toUpperCase() + word.slice(1);
 }
 
 function say(text) {
