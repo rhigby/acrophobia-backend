@@ -2,8 +2,8 @@ const { io } = require("socket.io-client");
 const path = require("path");
 const fs = require("fs");
 const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
-const englishWords = require("word-list-english");
-const DICTIONARY = new Set(englishWords["english-words-10"]);
+const wordList = require("an-array-of-english-words");
+const DICTIONARY = new Set(wordList);
 
 const SERVER_URL = process.env.SERVER_URL || "https://acrophobia-backend-2.onrender.com";
 const ROOM = process.env.ROOM || "room1";
