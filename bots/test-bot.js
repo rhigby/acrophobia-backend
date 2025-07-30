@@ -64,7 +64,8 @@ function randomLine(category, player = "") {
 function getWordForLetter(letter, index) {
   const upper = letter.toUpperCase();
   const dictPool = wordMapByLetter[upper] || [];
-  const themePool = wordBank[upper] || [];
+  const themePool = Array.isArray(wordBank[upper]) ? wordBank[upper] : [];
+
   const combined = [...dictPool, ...themePool].filter(w => w.length <= 10);
 
   if (combined.length === 0) {
@@ -75,6 +76,7 @@ function getWordForLetter(letter, index) {
   const word = combined[Math.floor(Math.random() * combined.length)];
   return word.charAt(0).toUpperCase() + word.slice(1);
 }
+
 
 function say(text) {
   console.log(`[BOT_CHAT] ${text}`);
