@@ -2,8 +2,6 @@ const { io } = require("socket.io-client");
 const path = require("path");
 const fs = require("fs");
 const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
-//const { english } = require("commonWords-english");
-//const commonWords = JSON.parse(fs.readFileSync(path.join(__dirname, "data", "commonWords.json"), "utf8"));
 
 const adjMap = require("./adjMap.json");
 const nounMap = require("./nounMap.json");
@@ -11,15 +9,7 @@ const verbMap = require("./verbMap.json");
 const wordMap = require("./wordMap.json");
 const chatLines = require("./chatDictionary");
 
-//const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 
-console.log("📦 Loaded commonWordssample:", commonWords.slice(0, 20));
-console.log("📦 Total words in commonWords:", Array.isArray(commonWords) ? commonWords.length : "Not an array");
-
-//const DICTIONARY = new Set(
-  //(Array.isArray(commonWords) ? commonWords: [])
- //   .filter(w => typeof w === "string" && w.length <= 10 && !w.endsWith("s") && /^[a-zA-Z]+$/.test(w))
-//);
 
 const SERVER_URL = process.env.SERVER_URL || "https://acrophobia-backend-2.onrender.com";
 const ROOM = process.env.ROOM || "room1";
