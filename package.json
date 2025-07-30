@@ -18,7 +18,8 @@
     "pg": "^8.16.3",
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.1",
-    "uuid": "^11.1.0"
+    "uuid": "^11.1.0",
+    "wordlist-english": "^1.2.1"
   },
   "keywords": [],
   "author": "",
