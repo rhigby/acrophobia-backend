@@ -3,8 +3,11 @@ const path = require("path");
 const fs = require("fs");
 const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
 const { english } = require("wordlist-english");
-const wordList = english["10"] || [];
-const DICTIONARY = new Set((Array.isArray(wordList) ? wordList : []).flat().filter(w => typeof w === "string" && w.length <= 10 && !w.endsWith('s')));
+const wordList = english["english"] || [];
+const DICTIONARY = new Set(
+  (Array.isArray(wordList) ? wordList : [])
+    .filter(w => typeof w === "string" && w.length <= 10 && !w.endsWith("s") && /^[a-zA-Z]+$/.test(w))
+);
 
 const SERVER_URL = process.env.SERVER_URL || "https://acrophobia-backend-2.onrender.com";
 const ROOM = process.env.ROOM || "room1";
@@ -67,14 +70,14 @@ function getWordForLetter(letter, index) {
   const dictPool = wordMapByLetter[upper] || [];
   const themePool = Array.isArray(wordBank[upper]) ? wordBank[upper] : [];
 
-  const dictSample = dictPool.filter(w => w.length <= 10 && /^[a-zA-Z]+$/.test(w));
+  const dictSample = dictPool.filter(w => typeof w === "string" && w.length <= 10 && /^[a-zA-Z]+$/.test(w));
   const themeSample = themePool.filter(w => typeof w === "string" && w.length <= 10 && /^[a-zA-Z]+$/.test(w));
 
   const combinedPool = [...dictSample, ...themeSample];
 
   if (combinedPool.length === 0) {
     console.warn(`⚠️ No usable words for letter: ${upper}`);
-    return null;
+    return upper;
   }
 
   const adjRegex = /ly$|ous$|ive$|ful$|ic$|al$/;
