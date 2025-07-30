@@ -26,7 +26,7 @@ const ROOM = process.env.ROOM || "room1";
 const PASSWORD = process.env.PASSWORD || "bot123";
 
 //const { getThemeForRoom } = require("../utils/profanityFilter");
-const chatLines = require("./chatDictionary");
+//const chatLines = require("./chatDictionary");
 
 //const theme = getThemeForRoom(ROOM);
 //const themePath = path.join(__dirname, "themes", `${theme}.json`);
