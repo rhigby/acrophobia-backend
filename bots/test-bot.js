@@ -22,6 +22,7 @@ const wordBank = JSON.parse(fs.readFileSync(themePath, "utf8"));
 
 const wordMapByLetter = {};
 for (let word of DICTIONARY) {
+  console.log(word);
   const first = word[0].toUpperCase();
   if (!wordMapByLetter[first]) wordMapByLetter[first] = [];
   wordMapByLetter[first].push(word);
@@ -72,7 +73,7 @@ function getWordForLetter(letter, index) {
 
   const dictSample = dictPool.filter(w => typeof w === "string" && w.length <= 10 && /^[a-zA-Z]+$/.test(w));
   const themeSample = themePool.filter(w => typeof w === "string" && w.length <= 10 && /^[a-zA-Z]+$/.test(w));
-console.log(dictPool);
+//console.log(dictPool);
   const combinedPool = [...dictSample, ...themeSample];
 
   if (combinedPool.length === 0) {
