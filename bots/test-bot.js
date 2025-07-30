@@ -2,7 +2,8 @@ const { io } = require("socket.io-client");
 const path = require("path");
 const fs = require("fs");
 const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
-const wordList = require("an-array-of-english-words");
+const { english } = require("wordlist-english");
+const wordList = english["10"]; // Top 10,000 most common words
 const DICTIONARY = new Set(wordList.filter(w => w.length <= 10 && !w.endsWith('s')));
 
 const SERVER_URL = process.env.SERVER_URL || "https://acrophobia-backend-2.onrender.com";
@@ -66,17 +67,29 @@ function getWordForLetter(letter, index) {
   const dictPool = wordMapByLetter[upper] || [];
   const themePool = Array.isArray(wordBank[upper]) ? wordBank[upper] : [];
 
-  const combined = [...dictPool, ...themePool].filter(w => w.length <= 10);
+  // Weighting: 60% theme, 40% dictionary
+  const dictSample = dictPool.filter(w => w.length <= 10 && /^[a-zA-Z]+$/.test(w));
+  const themeSample = themePool.filter(w => w.length <= 10 && /^[a-zA-Z]+$/.test(w));
 
-  if (combined.length === 0) {
+  const pool = [];
+  const maxLen = Math.max(dictSample.length, themeSample.length);
+
+  for (let i = 0; i < maxLen; i++) {
+    if (themeSample[i] && Math.random() < 0.6) pool.push(themeSample[i]);
+    else if (dictSample[i]) pool.push(dictSample[i]);
+  }
+
+  const poolByGrammar = index % 2 === 0 ? pool.filter(w => w.match(/ly$|ous$|ive$|ful$|ic$|al$/)) : pool.filter(w => !w.match(/ly$|ous$|ive$|ful$|ic$|al$/));
+  const finalPool = poolByGrammar.length > 0 ? poolByGrammar : pool;
+
+  if (finalPool.length === 0) {
     console.warn(`⚠️ No usable words for letter: ${upper}`);
     return upper;
   }
 
-  const word = combined[Math.floor(Math.random() * combined.length)];
+  const word = finalPool[Math.floor(Math.random() * finalPool.length)];
   return word.charAt(0).toUpperCase() + word.slice(1);
 }
-
 
 function say(text) {
   console.log(`[BOT_CHAT] ${text}`);
