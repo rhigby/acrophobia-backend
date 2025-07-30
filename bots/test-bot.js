@@ -78,17 +78,26 @@ function getWordForLetter(letter, index) {
     else if (dictSample[i]) pool.push(dictSample[i]);
   }
 
-  const poolByGrammar = index % 2 === 0 ? pool.filter(w => w.match(/ly$|ous$|ive$|ful$|ic$|al$/)) : pool.filter(w => !w.match(/ly$|ous$|ive$|ful$|ic$|al$/));
-  const finalPool = poolByGrammar.length > 0 ? poolByGrammar : pool;
-
-  if (finalPool.length === 0) {
+  if (pool.length === 0) {
     console.warn(`⚠️ No usable words for letter: ${upper}`);
     return upper;
   }
 
-  const word = finalPool[Math.floor(Math.random() * finalPool.length)];
+  const grammarIsAdjective = index % 2 === 0;
+  const adjRegex = /ly$|ous$|ive$|ful$|ic$|al$/;
+
+  let filtered = grammarIsAdjective
+    ? pool.filter(w => w.match(adjRegex))
+    : pool.filter(w => !w.match(adjRegex));
+
+  if (filtered.length === 0) {
+    filtered = pool; // fallback to full pool
+  }
+
+  const word = filtered[Math.floor(Math.random() * filtered.length)];
   return word.charAt(0).toUpperCase() + word.slice(1);
 }
+
 
 function say(text) {
   console.log(`[BOT_CHAT] ${text}`);
