@@ -1,9 +1,11 @@
 // test-bot.js
 
-const io = require("socket.io-client");
+// test-bot.js
+
+const { io } = require("socket.io-client");
 const path = require("path");
 const fs = require("fs");
-const fetch = require("node-fetch");
+const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
 const ROOM = process.env.ROOM || "room1";
 const SERVER_URL = process.env.SERVER_URL || "http://localhost:3000";
@@ -43,10 +45,29 @@ function getWordForLetter(letter, index) {
   return word.charAt(0).toUpperCase() + word.slice(1);
 }
 
+const usedChatLinesGlobal = {
+  greetings: new Set(),
+  submitTaunts: new Set(),
+  voteReactions: new Set(),
+  resultReactions: new Set(),
+};
+
 function randomLine(category, player = "") {
   const lines = chatLines[category];
-  const line = lines[Math.floor(Math.random() * lines.length)];
-  return typeof line === "function" ? line(player) : line;
+  const used = usedChatLinesGlobal[category];
+
+  const unused = lines.filter(line => {
+    const key = typeof line === "function" ? line.toString() : line;
+    return !used.has(key);
+  });
+
+  const chosen = unused.length
+    ? unused[Math.floor(Math.random() * unused.length)]
+    : lines[Math.floor(Math.random() * lines.length)];
+
+  const key = typeof chosen === "function" ? chosen.toString() : chosen;
+  used.add(key);
+  return typeof chosen === "function" ? chosen(player) : chosen;
 }
 
 async function loginOrRegister(username) {
@@ -95,6 +116,9 @@ async function runBot(username) {
   let currentPhase = "";
   let hasGreeted = false;
   let hasTaunted = false;
+  let votedForUser = null;
+  let hasVoted = false;
+  let entriesReceived = [];
 
   function sendChat(text) {
     socket.emit("chat_message", {
@@ -103,6 +127,33 @@ async function runBot(username) {
       text,
       isBot: true
     });
+  }
+
+  function isMostlyWords(text) {
+    const words = text.trim().split(/\s+/);
+    let validCount = 0;
+    for (let word of words) {
+      const cleanWord = word.toLowerCase().replace(/[^a-z]/gi, "");
+      if (wordMap[cleanWord.charAt(0).toUpperCase()]?.includes(cleanWord)) {
+        validCount++;
+      }
+    }
+    return validCount >= Math.floor(words.length * 0.6);
+  }
+
+  function voteNow(entries) {
+    const valid = entries.filter((e) => e.username !== username && isMostlyWords(e.text));
+    if (valid.length === 0) return;
+
+    const pick =
+      Math.random() < 0.7
+        ? valid.sort((a, b) => b.text.length - a.text.length)[0]
+        : valid[rand(0, valid.length - 1)];
+
+    votedForUser = pick.username;
+    socket.emit("vote_entry", { room: ROOM, entryId: pick.id });
+    console.log(`[${username}] ✅ Voted for: ${pick.text}`);
+    hasVoted = true;
   }
 
   socket.on("connect", () => {
@@ -126,11 +177,34 @@ async function runBot(username) {
     currentPhase = phase;
     hasSubmitted = false;
     hasTaunted = false;
+    hasVoted = false;
+    entriesReceived = [];
 
     if (phase === "submit") {
       setTimeout(() => trySubmit(), rand(10000, 20000));
+    } else if (phase === "results" && votedForUser) {
+      setTimeout(() => {
+        sendChat(randomLine("voteReactions", votedForUser));
+        votedForUser = null;
+      }, rand(1000, 3000));
     }
   });
+
+  socket.on("entries", (entries) => {
+    entriesReceived = entries;
+
+    if (!hasVoted && currentPhase === "vote") {
+      setTimeout(() => {
+        if (!hasVoted && currentPhase === "vote") voteNow(entries);
+      }, rand(3000, 8000));
+    }
+  });
+
+  setInterval(() => {
+    if (currentPhase === "vote" && !hasVoted && entriesReceived.length > 1) {
+      voteNow(entriesReceived);
+    }
+  }, 1000);
 
   function trySubmit() {
     if (!currentAcronym || hasSubmitted || currentPhase !== "submit") return;
@@ -167,6 +241,7 @@ if (botName && roomName) {
   console.log("❌ BOT_NAME and ROOM must be set");
   process.exit(1);
 }
+
 
 
 
