@@ -72,6 +72,11 @@ function getWordForLetter(letter, index) {
 
   const combinedPool = [...dictSample, ...themeSample];
 
+  if (combinedPool.length === 0) {
+    console.warn(`⚠️ No usable words for letter: ${upper}`);
+    return null;
+  }
+
   const adjRegex = /ly$|ous$|ive$|ful$|ic$|al$/;
   const grammarIsAdjective = index % 2 === 0;
 
@@ -80,13 +85,8 @@ function getWordForLetter(letter, index) {
     : combinedPool.filter(w => !w.match(adjRegex));
 
   if (filtered.length === 0) {
-    console.warn(`🪂 Fallback to non-grammar pool for letter: ${upper}`);
+    console.warn(`🪂 Fallback to combined pool (no grammar match) for ${upper}`);
     filtered = combinedPool;
-  }
-
-  if (filtered.length === 0) {
-    console.warn(`⚠️ No usable words for letter: ${upper}`);
-    return upper;
   }
 
   const word = filtered[Math.floor(Math.random() * filtered.length)];
