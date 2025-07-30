@@ -8,7 +8,7 @@ const DICTIONARY = new Set(
   (Array.isArray(wordList) ? wordList : [])
     .filter(w => typeof w === "string" && w.length <= 10 && !w.endsWith("s") && /^[a-zA-Z]+$/.test(w))
 );
-
+console.log(wordlist);
 const SERVER_URL = process.env.SERVER_URL || "https://acrophobia-backend-2.onrender.com";
 const ROOM = process.env.ROOM || "room1";
 const PASSWORD = process.env.PASSWORD || "bot123";
