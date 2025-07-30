@@ -21,6 +21,8 @@ const usedChatLinesGlobal = {
   resultReactions: new Set(),
 };
 
+const greetedRooms = new Set();
+
 function sendChat(socket, text) {
   socket.emit("chat_message", {
     room: ROOM,
@@ -191,9 +193,12 @@ async function runBot(username) {
       console.log(`[${username}] Connected`);
       socket.emit("join_room", { room: ROOM });
 
-      setTimeout(() => {
-        sendChat(socket, randomLine("greetings"));
-      }, rand(1000, 4000));
+      if (!greetedRooms.has(ROOM)) {
+        setTimeout(() => {
+          sendChat(socket, randomLine("greetings"));
+          greetedRooms.add(ROOM);
+        }, rand(1000, 4000));
+      }
     });
 
     socket.on("phase", (phase) => {
@@ -264,8 +269,6 @@ if (botName && roomName) {
   console.log("❌ BOT_NAME and ROOM must be set");
   process.exit(1);
 }
-
-
 
 
 // 👇 Prevent duplicate launch and enforce unique usernames
