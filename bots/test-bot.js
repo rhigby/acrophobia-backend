@@ -2,6 +2,7 @@ const { io } = require("socket.io-client");
 const path = require("path");
 const fs = require("fs");
 const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
+const chatLines = require("./chatDictionary");
 
 const SERVER_URL = process.env.SERVER_URL || "https://acrophobia-backend-2.onrender.com";
 const ROOM = process.env.ROOM || "room1";
@@ -13,6 +14,19 @@ const theme = getThemeForRoom(ROOM);
 const themePath = path.join(__dirname, "themes", `${theme}.json`);
 const wordBank = JSON.parse(fs.readFileSync(themePath, "utf8"));
 
+function sendChat(socket, text) {
+  socket.emit("chat_message", {
+    room: ROOM,
+    username: botName,
+    text,
+    isBot: true
+  });
+}
+
+function randomLine(list, playerName = "") {
+  const raw = list[Math.floor(Math.random() * list.length)];
+  return raw.replace("{player}", playerName);
+}
 
 function getWordForLetter(letter, index) {
   const upper = letter.toUpperCase();
@@ -101,7 +115,7 @@ async function runBot(username) {
       console.log(`[${username}] 📢 Received round_number: ${round}`);
     });
 
-
+    let votedForUser = null;
     function voteNow(entries) {
       const valid = entries.filter((e) => e.username !== username);
       if (valid.length === 0) return;
@@ -110,6 +124,8 @@ async function runBot(username) {
         Math.random() < 0.7
           ? valid.sort((a, b) => b.text.length - a.text.length)[0]
           : valid[rand(0, valid.length - 1)];
+      
+      votedForUser = pick.username;
 
       socket.emit("vote_entry", { room: ROOM, entryId: pick.id });
       console.log(`[${username}] ✅ Voted for: ${pick.text}`);
@@ -161,6 +177,17 @@ async function runBot(username) {
       canSubmit = phase === "submit" || phase === "faceoff_submit";
       hasSubmitted = false;
       hasVoted = false;
+      if (phase === "submit") {
+        setTimeout(() => {
+          sendChat(socket, randomLine(chatLines.submitTaunts));
+        }, rand(3000, 7000));
+      }
+      if (phase === "results" && votedForUser) {
+        setTimeout(() => {
+          sendChat(socket, randomLine(chatLines.voteReactions, votedForUser));
+          votedForUser = null; // reset
+        }, rand(1000, 4000));
+      }
       console.log(`[${username}] Phase: ${phase}`);
     });
 
