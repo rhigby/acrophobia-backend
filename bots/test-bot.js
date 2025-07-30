@@ -11,7 +11,7 @@ const verbMap = require("./verbMap.json");
 const wordMap = require("./wordMap.json");
 const chatLines = require("./chatDictionary");
 
-const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+//const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 
 console.log("📦 Loaded commonWordssample:", commonWords.slice(0, 20));
 console.log("📦 Total words in commonWords:", Array.isArray(commonWords) ? commonWords.length : "Not an array");
