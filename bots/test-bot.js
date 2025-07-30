@@ -23,6 +23,7 @@ const usedChatLinesGlobal = {
 
 let hasGreeted = false;
 let hasTauntedThisRound = false;
+let submittedAnswerThisRound = false;
 
 function sendChat(socket, text) {
   socket.emit("chat_message", {
@@ -136,6 +137,7 @@ async function runBot(username) {
     socket.on("round_number", (round) => {
       currentRound = round;
       hasTauntedThisRound = false;
+      submittedAnswerThisRound = false;
       console.log(`[${username}] 📢 Received round_number: ${round}`);
     });
 
@@ -154,13 +156,6 @@ async function runBot(username) {
       socket.emit("vote_entry", { room: ROOM, entryId: pick.id });
       console.log(`[${username}] ✅ Voted for: ${pick.text}`);
       hasVoted = true;
-    }
-
-    function buildAnswer(acronym) {
-      const words = acronym.toUpperCase().split("").map((letter, index) =>
-        getWordForLetter(letter, index)
-      );
-      return words.join(" ");
     }
 
     function trySubmit(source) {
@@ -183,11 +178,19 @@ async function runBot(username) {
 
         setTimeout(() => {
           socket.emit("submit_entry", { room: ROOM, text: answer });
-          console.log(`[${username}] ✍️ Submitted (${source}): ${answer} after ${delay}ms`);
+          console.log(`[${username}] ✍️ Submitted: ${answer} after ${delay}ms`);
+          hasSubmitted = true;
+          submittedAnswerThisRound = true;
+
+          if (!hasTauntedThisRound) {
+            setTimeout(() => {
+              sendChat(socket, randomLine("submitTaunts"));
+              hasTauntedThisRound = true;
+            }, rand(1000, 3000));
+          }
         }, delay);
-        hasSubmitted = true;
       } else {
-        console.warn(`[${username}] 🚫 Invalid answer (${source}): "${answer}"`);
+        console.warn(`[${username}] 🚫 Invalid answer: "${answer}"`);
       }
     }
 
@@ -208,16 +211,6 @@ async function runBot(username) {
       canSubmit = phase === "submit" || phase === "faceoff_submit";
       hasSubmitted = false;
       hasVoted = false;
-
-      if (phase === "submit") {
-        // Delay taunt to allow answer to be submitted first
-        setTimeout(() => {
-          if (!hasTauntedThisRound) {
-            sendChat(socket, randomLine("submitTaunts"));
-            hasTauntedThisRound = true;
-          }
-        }, 8000);
-      }
 
       if (phase === "results" && votedForUser) {
         setTimeout(() => {
@@ -275,6 +268,7 @@ if (botName && roomName) {
   console.log("❌ BOT_NAME and ROOM must be set");
   process.exit(1);
 }
+
 
 
 
