@@ -72,7 +72,7 @@ function getWordForLetter(letter, index) {
 
   const dictSample = dictPool.filter(w => typeof w === "string" && w.length <= 10 && /^[a-zA-Z]+$/.test(w));
   const themeSample = themePool.filter(w => typeof w === "string" && w.length <= 10 && /^[a-zA-Z]+$/.test(w));
-console.log(dictSample);
+console.log(dictPool);
   const combinedPool = [...dictSample, ...themeSample];
 
   if (combinedPool.length === 0) {
