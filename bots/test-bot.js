@@ -14,6 +14,13 @@ const theme = getThemeForRoom(ROOM);
 const themePath = path.join(__dirname, "themes", `${theme}.json`);
 const wordBank = JSON.parse(fs.readFileSync(themePath, "utf8"));
 
+let usedChatLines = {
+  greetings: new Set(),
+  voteReactions: new Set(),
+  resultReactions: new Set(),
+  submitTaunts: new Set()
+};
+
 function sendChat(socket, text) {
   socket.emit("chat_message", {
     room: ROOM,
@@ -23,9 +30,17 @@ function sendChat(socket, text) {
   });
 }
 
-function randomLine(list, playerName = "") {
-  const raw = list[Math.floor(Math.random() * list.length)];
-  return raw.replace("{player}", playerName);
+function randomLine(category, player = "") {
+  const lines = chatLines[category];
+  const used = usedChatLines[category];
+
+  const unused = lines.filter(line => !used.has(line));
+  const chosen = unused.length
+    ? unused[Math.floor(Math.random() * unused.length)]
+    : lines[Math.floor(Math.random() * lines.length)];
+
+  used.add(chosen);
+  return chosen.replace("{player}", player);
 }
 
 function getWordForLetter(letter, index) {
@@ -177,17 +192,24 @@ async function runBot(username) {
       canSubmit = phase === "submit" || phase === "faceoff_submit";
       hasSubmitted = false;
       hasVoted = false;
-      if (phase === "submit") {
-        setTimeout(() => {
-          sendChat(socket, randomLine(chatLines.submitTaunts));
-        }, rand(3000, 7000));
-      }
-      if (phase === "results" && votedForUser) {
-        setTimeout(() => {
-          sendChat(socket, randomLine(chatLines.voteReactions, votedForUser));
-          votedForUser = null; // reset
-        }, rand(1000, 4000));
-      }
+     if (phase === "submit") {
+    // Reset used chat lines each round
+    for (const key in usedChatLines) {
+      usedChatLines[key].clear();
+    }
+
+    // Random chat entry (taunt)
+    setTimeout(() => {
+      sendChat(socket, randomLine("submitTaunts"));
+    }, rand(3000, 7000));
+  }
+
+  if (phase === "results" && votedForUser) {
+    setTimeout(() => {
+      sendChat(socket, randomLine("voteReactions", votedForUser));
+      votedForUser = null;
+    }, rand(1000, 4000));
+  }
       console.log(`[${username}] Phase: ${phase}`);
     });
 
