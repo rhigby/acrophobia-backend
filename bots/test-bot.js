@@ -70,24 +70,18 @@ function getWordForLetter(letter, index) {
   const dictSample = dictPool.filter(w => w.length <= 10 && /^[a-zA-Z]+$/.test(w));
   const themeSample = themePool.filter(w => typeof w === "string" && w.length <= 10 && /^[a-zA-Z]+$/.test(w));
 
-  const pool = [];
-  const maxLen = Math.max(dictSample.length, themeSample.length);
-
-  for (let i = 0; i < maxLen; i++) {
-    if (themeSample[i] && Math.random() < 0.6) pool.push(themeSample[i]);
-    else if (dictSample[i]) pool.push(dictSample[i]);
-  }
+  const combinedPool = [...dictSample, ...themeSample];
 
   const adjRegex = /ly$|ous$|ive$|ful$|ic$|al$/;
   const grammarIsAdjective = index % 2 === 0;
 
   let filtered = grammarIsAdjective
-    ? pool.filter(w => w.match(adjRegex))
-    : pool.filter(w => !w.match(adjRegex));
+    ? combinedPool.filter(w => w.match(adjRegex))
+    : combinedPool.filter(w => !w.match(adjRegex));
 
   if (filtered.length === 0) {
     console.warn(`🪂 Fallback to non-grammar pool for letter: ${upper}`);
-    filtered = pool;
+    filtered = combinedPool;
   }
 
   if (filtered.length === 0) {
