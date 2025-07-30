@@ -8,18 +8,13 @@ const ROOM = process.env.ROOM || "room1";
 const PASSWORD = process.env.PASSWORD || "bot123";
 
 const { getThemeForRoom } = require("../utils/profanityFilter");
-const {
-  greetings,
-  submitTaunts,
-  voteReactions,
-  resultReactions,
-} = require("./chatDictionary");
+const chatLines = require("./chatDictionary");
 
 const theme = getThemeForRoom(ROOM);
 const themePath = path.join(__dirname, "themes", `${theme}.json`);
 const wordBank = JSON.parse(fs.readFileSync(themePath, "utf8"));
 
-const usedChatLines = {
+const usedChatLinesGlobal = {
   greetings: new Set(),
   submitTaunts: new Set(),
   voteReactions: new Set(),
@@ -31,20 +26,25 @@ function sendChat(socket, text) {
     room: ROOM,
     username: botName,
     text,
-    isBot: true,
+    isBot: true
   });
 }
 
 function randomLine(category, player = "") {
-  const lines = { greetings, submitTaunts, voteReactions, resultReactions }[category];
-  const used = usedChatLines[category];
+  const lines = chatLines[category];
+  const used = usedChatLinesGlobal[category];
 
-  const unused = lines.filter((line) => !used.has(line));
+  const unused = lines.filter(line => {
+    const key = typeof line === "function" ? line.toString() : line;
+    return !used.has(key);
+  });
+
   const chosen = unused.length
     ? unused[Math.floor(Math.random() * unused.length)]
     : lines[Math.floor(Math.random() * lines.length)];
 
-  used.add(chosen);
+  const key = typeof chosen === "function" ? chosen.toString() : chosen;
+  used.add(key);
   return typeof chosen === "function" ? chosen(player) : chosen;
 }
 
@@ -190,9 +190,10 @@ async function runBot(username) {
     socket.on("connect", () => {
       console.log(`[${username}] Connected`);
       socket.emit("join_room", { room: ROOM });
+
       setTimeout(() => {
         sendChat(socket, randomLine("greetings"));
-      }, rand(1000, 5000));
+      }, rand(1000, 4000));
     });
 
     socket.on("phase", (phase) => {
@@ -202,7 +203,6 @@ async function runBot(username) {
       hasVoted = false;
 
       if (phase === "submit") {
-        for (const key in usedChatLines) usedChatLines[key].clear();
         setTimeout(() => {
           sendChat(socket, randomLine("submitTaunts"));
         }, rand(3000, 7000));
@@ -213,10 +213,6 @@ async function runBot(username) {
           sendChat(socket, randomLine("voteReactions", votedForUser));
           votedForUser = null;
         }, rand(1000, 4000));
-
-        setTimeout(() => {
-          sendChat(socket, randomLine("resultReactions"));
-        }, rand(4000, 9000));
       }
 
       console.log(`[${username}] Phase: ${phase}`);
