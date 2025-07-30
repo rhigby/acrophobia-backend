@@ -209,11 +209,14 @@ async function runBot(username) {
       hasSubmitted = false;
       hasVoted = false;
 
-      if (phase === "submit" && !hasTauntedThisRound) {
+      if (phase === "submit") {
+        // Delay taunt to allow answer to be submitted first
         setTimeout(() => {
-          sendChat(socket, randomLine("submitTaunts"));
-          hasTauntedThisRound = true;
-        }, rand(3000, 7000));
+          if (!hasTauntedThisRound) {
+            sendChat(socket, randomLine("submitTaunts"));
+            hasTauntedThisRound = true;
+          }
+        }, 8000);
       }
 
       if (phase === "results" && votedForUser) {
