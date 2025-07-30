@@ -2,6 +2,8 @@ const { io } = require("socket.io-client");
 const path = require("path");
 const fs = require("fs");
 const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
+const englishWords = require("an-array-of-english-words");
+const DICTIONARY = new Set(englishWords.map(word => word.toLowerCase()));
 
 const SERVER_URL = process.env.SERVER_URL || "https://acrophobia-backend-2.onrender.com";
 const ROOM = process.env.ROOM || "room1";
@@ -69,6 +71,20 @@ function say(text) {
 
 function rand(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function isMostlyWords(text) {
+  const words = text.trim().split(/\s+/);
+  let validCount = 0;
+
+  for (let word of words) {
+    const cleanWord = word.toLowerCase().replace(/[^a-z]/gi, "");
+    if (DICTIONARY.has(cleanWord)) {
+      validCount++;
+    }
+  }
+
+  return validCount >= Math.floor(words.length * 0.6);
 }
 
 async function loginOrRegister(username) {
@@ -143,7 +159,7 @@ async function runBot(username) {
 
     let votedForUser = null;
     function voteNow(entries) {
-      const valid = entries.filter((e) => e.username !== username);
+      const valid = entries.filter((e) => e.username !== username && isMostlyWords(e.text));
       if (valid.length === 0) return;
 
       const pick =
@@ -268,7 +284,6 @@ if (botName && roomName) {
   console.log("❌ BOT_NAME and ROOM must be set");
   process.exit(1);
 }
-
 
 
 
