@@ -103,18 +103,17 @@ function rand(min, max) {
 }
 
 function isMostlyWords(text) {
-  const words = text.trim().split(/\s+/);
-  let validCount = 0;
-
-  for (let word of words) {
-    const cleanWord = word.toLowerCase().replace(/[^a-z]/gi, "");
-    if (DICTIONARY.has(cleanWord)) {
-      validCount++;
+    const words = text.trim().split(/\s+/);
+    let validCount = 0;
+    for (let word of words) {
+      const cleanWord = word.toLowerCase().replace(/[^a-z]/gi, "");
+      const upper = cleanWord.charAt(0).toUpperCase();
+      if (wordMap[upper]?.includes(cleanWord)) {
+        validCount++;
+      }
     }
+    return validCount >= Math.floor(words.length * 0.6);
   }
-
-  return validCount >= Math.floor(words.length * 0.6);
-}
 
 async function loginOrRegister(username) {
   const loginRes = await fetch(`${SERVER_URL}/api/login-token`, {
