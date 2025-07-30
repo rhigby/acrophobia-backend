@@ -22,13 +22,13 @@ const PASSWORD = process.env.PASSWORD || "bot123";
 //const themePath = path.join(__dirname, "themes", `${theme}.json`);
 //const wordBank = JSON.parse(fs.readFileSync(themePath, "utf8"));
 
-const wordMapByLetter = {};
-for (let word of DICTIONARY) {
-  const first = word[0]?.toUpperCase();
-  if (!first || !/^[A-Z]$/.test(first)) continue;
-  if (!wordMapByLetter[first]) wordMapByLetter[first] = [];
-  wordMapByLetter[first].push(word);
-}
+// const wordMapByLetter = {};
+// for (let word of DICTIONARY) {
+//   const first = word[0]?.toUpperCase();
+//   if (!first || !/^[A-Z]$/.test(first)) continue;
+//   if (!wordMapByLetter[first]) wordMapByLetter[first] = [];
+//   wordMapByLetter[first].push(word);
+// }
 
 const usedChatLinesGlobal = {
   greetings: new Set(),
