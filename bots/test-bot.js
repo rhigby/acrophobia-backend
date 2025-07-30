@@ -2,14 +2,14 @@ const { io } = require("socket.io-client");
 const path = require("path");
 const fs = require("fs");
 const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
-const { english } = require("wordlist-english");
-const wordList = english["english/60"] || [];
+//const { english } = require("commonWords-english");
+const commonWords = JSON.parse(fs.readFileSync(path.join(__dirname, "data", "commonWords.json"), "utf8"));
 
-console.log("📦 Loaded wordList sample:", wordList.slice(0, 20));
-console.log("📦 Total words in wordList:", Array.isArray(wordList) ? wordList.length : "Not an array");
+console.log("📦 Loaded commonWordssample:", commonWords.slice(0, 20));
+console.log("📦 Total words in commonWords:", Array.isArray(commonWords) ? commonWords.length : "Not an array");
 
 const DICTIONARY = new Set(
-  (Array.isArray(wordList) ? wordList : [])
+  (Array.isArray(commonWords) ? commonWords: [])
     .filter(w => typeof w === "string" && w.length <= 10 && !w.endsWith("s") && /^[a-zA-Z]+$/.test(w))
 );
 
