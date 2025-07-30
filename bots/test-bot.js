@@ -67,37 +67,33 @@ function getWordForLetter(letter, index) {
   const dictPool = wordMapByLetter[upper] || [];
   const themePool = Array.isArray(wordBank[upper]) ? wordBank[upper] : [];
 
-  const dictSample = dictPool.filter(w => w.length <= 10 && /^[a-zA-Z]+$/.test(w));
-  const themeSample = themePool.filter(w => typeof w === "string" && w.length <= 10 && /^[a-zA-Z]+$/.test(w));
+  const combinedPool = [...new Set([
+    ...themePool.filter(w => typeof w === "string"),
+    ...dictPool.filter(w => typeof w === "string")
+  ])].filter(w => w.length <= 10 && /^[a-zA-Z]+$/.test(w));
 
-  const pool = [];
-  const maxLen = Math.max(dictSample.length, themeSample.length);
-
-  for (let i = 0; i < maxLen; i++) {
-    if (themeSample[i] && Math.random() < 0.6) pool.push(themeSample[i]);
-    else if (dictSample[i]) pool.push(dictSample[i]);
-  }
-
-  const adjRegex = /ly$|ous$|ive$|ful$|ic$|al$/;
-  const grammarIsAdjective = index % 2 === 0;
-
-  let filtered = grammarIsAdjective
-    ? pool.filter(w => w.match(adjRegex))
-    : pool.filter(w => !w.match(adjRegex));
-
-  if (filtered.length === 0) {
-    console.warn(`🪂 Fallback to non-grammar pool for letter: ${upper}`);
-    filtered = pool;
-  }
-
-  if (filtered.length === 0) {
-    console.warn(`⚠️ No usable words for letter: ${upper}`);
+  if (combinedPool.length === 0) {
+    console.warn(`⚠️ No words found at all for letter: ${upper}`);
     return upper;
+  }
+
+  // Grammar preference
+  const adjRegex = /ly$|ous$|ive$|ful$|ic$|al$/;
+  const isAdj = index % 2 === 0;
+
+  // 1. Grammar + length filter
+  let filtered = combinedPool.filter(w => isAdj ? adjRegex.test(w) : !adjRegex.test(w));
+
+  // 2. Relax grammar if nothing found
+  if (filtered.length === 0) {
+    console.warn(`🪂 Relaxed grammar filter for ${upper}`);
+    filtered = combinedPool;
   }
 
   const word = filtered[Math.floor(Math.random() * filtered.length)];
   return word.charAt(0).toUpperCase() + word.slice(1);
 }
+
 
 function say(text) {
   console.log(`[BOT_CHAT] ${text}`);
