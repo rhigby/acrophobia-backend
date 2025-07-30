@@ -22,6 +22,7 @@ const usedChatLinesGlobal = {
 };
 
 let hasGreeted = false;
+let hasTauntedThisRound = false;
 
 function sendChat(socket, text) {
   socket.emit("chat_message", {
@@ -134,6 +135,7 @@ async function runBot(username) {
 
     socket.on("round_number", (round) => {
       currentRound = round;
+      hasTauntedThisRound = false;
       console.log(`[${username}] 📢 Received round_number: ${round}`);
     });
 
@@ -207,9 +209,10 @@ async function runBot(username) {
       hasSubmitted = false;
       hasVoted = false;
 
-      if (phase === "submit") {
+      if (phase === "submit" && !hasTauntedThisRound) {
         setTimeout(() => {
           sendChat(socket, randomLine("submitTaunts"));
+          hasTauntedThisRound = true;
         }, rand(3000, 7000));
       }
 
@@ -269,6 +272,7 @@ if (botName && roomName) {
   console.log("❌ BOT_NAME and ROOM must be set");
   process.exit(1);
 }
+
 
 
 
