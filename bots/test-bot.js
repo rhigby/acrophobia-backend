@@ -3,7 +3,7 @@ const path = require("path");
 const fs = require("fs");
 const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
 const wordList = require("an-array-of-english-words");
-const DICTIONARY = new Set(wordList);
+const DICTIONARY = new Set(wordList.filter(w => w.length <= 10 && !w.endsWith('s')));
 
 const SERVER_URL = process.env.SERVER_URL || "https://acrophobia-backend-2.onrender.com";
 const ROOM = process.env.ROOM || "room1";
@@ -63,14 +63,16 @@ function randomLine(category, player = "") {
 
 function getWordForLetter(letter, index) {
   const upper = letter.toUpperCase();
-  const pool = wordMapByLetter[upper] || [];
+  const dictPool = wordMapByLetter[upper] || [];
+  const themePool = wordBank[upper] || [];
+  const combined = [...dictPool, ...themePool].filter(w => w.length <= 10);
 
-  if (pool.length === 0) {
-    console.warn(`⚠️ No dictionary words found for letter: ${upper}`);
+  if (combined.length === 0) {
+    console.warn(`⚠️ No usable words for letter: ${upper}`);
     return upper;
   }
 
-  const word = pool[Math.floor(Math.random() * pool.length)];
+  const word = combined[Math.floor(Math.random() * combined.length)];
   return word.charAt(0).toUpperCase() + word.slice(1);
 }
 
@@ -293,6 +295,7 @@ if (botName && roomName) {
   console.log("❌ BOT_NAME and ROOM must be set");
   process.exit(1);
 }
+
 
 
 
