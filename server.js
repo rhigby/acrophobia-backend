@@ -1,7 +1,14 @@
 // backend/server.js
 require("dotenv").config();
-const { containsInappropriate } = require("./utils/profanityFilter");
+const {
+  containsInappropriate,
+  roomSettings,
+  getThemeForRoom
+} = require("./utils/profanityFilter");
+const bcrypt = require("bcrypt");
+
 const express = require("express");
+const router = express.Router();
 const activeUsers = new Map();
 const userRooms = {}; // Track each user's current room
 const roomRounds = {};
@@ -21,43 +28,9 @@ const io = new Server(server, {
 });
 const path = require("path");
 const { spawn } = require("child_process");
-const roomSettings = {
-   Eighties: {
-    displayName: "80's Theme",
-    filterProfanity: true,
-    theme: "eighties"
-  },
-   Ninties: {
-    displayName: "90's Theme",
-    filterProfanity: true,
-    theme: "ninties"
-  },
-  CleanFun: {
-    displayName: "Clean Fun",
-    filterProfanity: true,
-    theme: "general"
-  },
-  SportsArena: {
-    displayName: "Sports Arena",
-    filterProfanity: true,
-    theme: "sports"
-  },
-   AnythingGoes: {
-    displayName: "Anything Goes",
-    filterProfanity: false,
-    theme: "anything"
-  },
-    LateNight: {
-    displayName: "Late Night",
-    filterProfanity: false,
-    theme: "anything"
-  },
-   TheCouch: {
-    displayName: "The Couch",
-    filterProfanity: false,
-    theme: "anything"
-  }
-};
+const roomBots = {};
+
+
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -83,6 +56,8 @@ app.use(cors({
 
 app.use(express.json());
 
+app.use(router);
+
 app.get("/api/me", async (req, res) => {
   const auth = req.headers.authorization;
   const token = auth?.split(" ")[1];
@@ -93,6 +68,82 @@ app.get("/api/me", async (req, res) => {
 
   res.json({ username: result.rows[0].username });
 });
+
+function cleanupRoomIfEmpty(room) {
+  const roomData = rooms[room];
+  if (!roomData) return;
+
+  const realPlayers = roomData.players.filter(p => !p.username.includes("-bot"));
+
+  if (realPlayers.length === 0) {
+    console.log(`🧹 Resetting room ${room} (no real players left)`);
+
+    // Kill any bots
+    if (roomBots[room]) {
+      roomBots[room].forEach(botProc => botProc.kill());
+      delete roomBots[room];
+    }
+
+    // Remove room and related data
+    delete rooms[room];
+    delete roomSettings[room];
+    delete roomRounds[room];
+
+    // Clean up any user mappings pointing to the deleted room
+    for (const [username, assignedRoom] of Object.entries(userRooms)) {
+      if (assignedRoom === room) {
+        delete userRooms[username];
+        activeUsers.delete(username);
+      }
+    }
+
+    emitRoomStats();
+  }
+}
+
+
+
+function launchBot(botName, room) {
+  if (roomBots[room]?.some(proc => proc.spawnargs.includes(botName))) {
+    console.log(`⚠️ Bot ${botName} already running in ${room}`);
+    return;
+  }
+
+  const botPath = path.join(__dirname, "bots", "test-bot.js");
+  const bot = spawn("node", [botPath, botName, room], {
+    cwd: __dirname,
+    env: { ...process.env, BOT_NAME: botName, ROOM: room }
+  });
+
+  if (!roomBots[room]) roomBots[room] = [];
+  roomBots[room].push(bot);
+
+  bot.stdout.on("data", (data) => {
+    const message = data.toString().trim();
+    console.log(`[${botName}]: ${message}`);
+
+    // 💬 Detect chat messages sent from the bot
+    if (message.startsWith("[BOT_CHAT]")) {
+      const chatText = message.replace("[BOT_CHAT]", "").trim();
+
+      io.to(room).emit("chat_message", {
+        username: botName,
+        text: chatText,
+        isBot: true
+      });
+    }
+  });
+
+  bot.stderr.on("data", (data) => {
+    console.error(`[${botName} ERROR]: ${data}`);
+  });
+
+  bot.on("close", (code) => {
+    console.log(`[${botName}] exited with code ${code}`);
+  });
+}
+
+
 
 
 function safeOriginCheck(origin, callback) {
@@ -109,18 +160,68 @@ function safeOriginCheck(origin, callback) {
   }
 }
 
+router.post("/api/register", async (req, res) => {
+  const { username, email, password } = req.body;
+  if (!username || !email || !password) {
+    return res.status(400).json({ message: "Missing required fields" });
+  }
+
+  try {
+    const existing = await pool.query(
+      "SELECT username FROM users WHERE username = $1 OR email = $2",
+      [username, email]
+    );
+
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ message: "Username or email already exists" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    //const hashedPassword = password;
+
+    await pool.query(
+      "INSERT INTO users (username, email, password) VALUES ($1, $2, $3)",
+      [username, email, hashedPassword]
+    );
+
+    res.status(201).json({ success: true });
+  } catch (err) {
+    if (err.code === "23505") {
+      // Unique constraint violation
+      return res.status(409).json({ message: "Username or email already exists" });
+    }
+
+    console.error("Registration error:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+module.exports = router;
+
 app.post("/api/login-token", express.json(), async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: "Missing credentials" });
 
-  const result = await pool.query(`SELECT * FROM users WHERE username = $1 AND password = $2`, [username, password]);
-  if (result.rows.length === 0) return res.status(401).json({ error: "Invalid credentials" });
+  const userResult = await pool.query(`SELECT * FROM users WHERE username = $1`, [username]);
+
+  if (userResult.rows.length === 0) {
+    return res.status(401).json({ error: "Invalid credentials" });
+  }
+
+  const user = userResult.rows[0];
+  const passwordMatch = await bcrypt.compare(password, user.password);
+
+  if (!passwordMatch) {
+    return res.status(401).json({ error: "Invalid credentials" });
+  }
 
   const token = uuidv4();
   await pool.query(`INSERT INTO sessions (token, username) VALUES ($1, $2)`, [token, username]);
 
   res.json({ success: true, token });
 });
+
 
 app.post("/api/update-profile", express.json(), async (req, res) => {
   const auth = req.headers.authorization;
@@ -404,19 +505,66 @@ async function initDb() {
 initDb().catch(console.error);
 
 function getActiveUserList() {
-  return Array.from(activeUsers.entries()).map(([username, room]) => ({
-    username,
-    room
-  }));
+  const seen = new Set();
+  const list = [];
+
+  for (const [username, room] of activeUsers.entries()) {
+    if (!seen.has(username)) {
+      list.push({ username, room });
+      seen.add(username);
+    }
+  }
+
+  return list;
 }
+
 const rooms = {};
 const MAX_PLAYERS = 10;
 const MAX_ROUNDS = 5;
 
+const LETTER_WEIGHTS = [
+  "E","E","E","E","E","E","E","E","E","E",
+  "A","A","A","A","A","A","A","A",
+  "R","R","R","R","R","R",
+  "I","I","I","I","I",
+  "O","O","O","O",
+  "T","T","T","T",
+  "N","N","N","N",
+  "S","S","S",
+  "L","L","L",
+  "C","C","C",
+  "U","U","U",
+  "D","D",
+  "P","P",
+  "M","M",
+  "H","H",
+  "G","G",
+  "B","B",
+  "F",
+  "Y",
+  "W",
+  "K",
+  "V",
+  "X",
+  "Z",
+  "J",
+  "Q"
+];
+
 function createAcronym(length) {
-  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  return Array.from({ length }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
+  const pool = [...LETTER_WEIGHTS];
+  const result = [];
+
+  while (result.length < length && pool.length > 0) {
+    const index = Math.floor(Math.random() * pool.length);
+    const letter = pool[index];
+    result.push(letter);
+    pool.splice(index, 1); // prevent repeats
+  }
+
+  return result.join("");
 }
+
 
 function emitToRoom(roomId, event, data) {
   io.to(roomId).emit(event, data);
@@ -784,14 +932,20 @@ function startFaceoffVoting(roomId) {
 
 function getRoomStats() {
   const stats = {};
-  for (const roomName in rooms) {
+  for (const [roomName, room] of Object.entries(rooms)) {
+    const usernames = room.players.map(p => p.username);
+    const botCount = usernames.filter(name => name.startsWith(`${roomName}-bot`)).length;
+
     stats[roomName] = {
-      players: rooms[roomName].players.length,
-      round: rooms[roomName].round || 0,
+      players: usernames.length,
+      round: room.round,
+      botCount,
+      usernames  // 👈 Include this so frontend can break down real vs bot users
     };
   }
   return stats;
 }
+
 
 io.use(async (socket, next) => {
   const token = socket.handshake.auth?.token;
@@ -833,6 +987,12 @@ io.use(async (socket, next) => {
 //   }
 //   next();
 // });
+function emitRoomStats() {
+  const stats = getRoomStats();
+  console.log("🚀 Emitting room stats:", stats);
+  io.emit("room_list", stats);
+}
+
 
 io.on("connection", (socket) => {
   console.log("Socket connected:", socket.id, "user:", socket.data.username);
@@ -868,18 +1028,27 @@ io.on("connection", (socket) => {
 
 
   socket.on("login", async ({ username, password }, callback) => {
-     console.log("📩 Login event received:", username, password);
+  console.log("📩 Login event received:", username, password);
   if (!username || !password) {
     return callback({ success: false, message: "Missing credentials" });
   }
 
   try {
+    // Fetch user by username only
     const userResult = await pool.query(
-      `SELECT * FROM users WHERE username = $1 AND password = $2`,
-      [username, password]
+      `SELECT * FROM users WHERE username = $1`,
+      [username]
     );
 
     if (userResult.rows.length === 0) {
+      return callback({ success: false, message: "Invalid credentials" });
+    }
+
+    const user = userResult.rows[0];
+
+    // Compare plaintext password to hashed one
+    const passwordMatch = await bcrypt.compare(password, user.password);
+    if (!passwordMatch) {
       return callback({ success: false, message: "Invalid credentials" });
     }
 
@@ -993,23 +1162,54 @@ socket.on("chat_message", ({ room, text }) => {
   io.to(room).emit("chat_message", { username, text });
 });
 
+socket.on("confirm_add_bots", ({ room, count = 3 }) => {
+  if (!room || !rooms[room] || count < 3 || count > 7) return;
+
+  const existingNames = new Set(rooms[room].players.map(p => p.username));
+  roomBots[room] = [];
+
+  for (let i = 1; i <= count; i++) {
+    const botName = `${room}-bot${i}`;
+    if (!existingNames.has(botName)) {
+      const bot = launchBot(botName, room);
+      if (bot) roomBots[room].push(bot);
+    }
+  }
+});
+
 
  
 
-socket.on("join_room", ({ room }, callback) => {
-  io.emit("room_list", getRoomStats());
-
+socket.on("join_room", (data, callback) => {
+  const roomId = data?.room;
   const username = socket.data?.username;
-  if (!username) {
-    return callback?.({ success: false, message: "Unauthorized – not logged in" });
+
+  if (!username || !roomId) {
+    return callback?.({ success: false, message: "Unauthorized or missing room" });
   }
 
-  activeUsers.set(username, room);
-  io.emit("active_users", getActiveUserList());
+  // 🔄 Clean up previous room (if any)
+  const previousRoom = userRooms[username];
+  if (previousRoom && rooms[previousRoom]) {
+    rooms[previousRoom].players = rooms[previousRoom].players.filter(p => p.username !== username);
 
-  if (!rooms[room]) {
+    // 🧹 Clear player's score in previous room
+    delete rooms[previousRoom].scores?.[username];
+    delete rooms[previousRoom].faceoff?.scores?.[username];
+
+    emitToRoom(previousRoom, "players", rooms[previousRoom].players);
+  }
+
+  // 🗂 Assign to new room
+  userRooms[username] = roomId;
+  activeUsers.set(username, roomId);
+  socket.data.room = roomId;
+  socket.join(roomId);
+
+  // 📦 Initialize room if not exists
+  if (!rooms[roomId]) {
     const defaultSettings = { filterProfanity: false, theme: "general" };
-    rooms[room] = {
+    rooms[roomId] = {
       players: [],
       scores: {},
       phase: "waiting",
@@ -1024,41 +1224,62 @@ socket.on("join_room", ({ room }, callback) => {
         scores: {}
       },
       ...defaultSettings,
-      ...roomSettings[room]
+      ...roomSettings[roomId]
     };
   }
 
-  const r = rooms[room];
+  const room = rooms[roomId];
 
-  if (r.players.find(p => p.username === username)) {
+  // ❌ Prevent rejoining same room
+  if (room.players.find(p => p.username === username)) {
     return callback?.({ success: false, message: "User already in room" });
   }
 
-  if (r.players.length >= MAX_PLAYERS) {
+  // ❌ Prevent overfilling
+  if (room.players.length >= MAX_PLAYERS) {
     return callback?.({ success: false, message: "Room is full" });
   }
 
-  socket.join(room);
-  socket.data.room = room;
+  // ✅ Add to players list
+  room.players.push({ id: socket.id, username });
+  room.scores[username] = 0;
 
-  r.players.push({ id: socket.id, username });
-  emitToRoom(room, "players", r.players);
+  emitToRoom(roomId, "players", room.players);
 
-  // 💡 Auto-join bots if only 1 real player
-  const realPlayers = r.players.filter(p => !p.username.startsWith("bot"));
-  if (realPlayers.length === 1) {
-    ["bot1", "bot2", "bot3"].forEach((suffix, i) => {
-      const botName = `${room}-bot${i + 1}`;
-      launchBot(botName, room);
-    });
+  // ✅ Emit room_list here (after players are initialized)
+  emitToRoom(roomId, "room_list", {
+    players: room.players.length,
+    botCount: room.players.filter(p => p.isBot).length,
+    usernames: room.players.map(p => p.username),
+  });
+
+  emitRoomStats();
+  io.emit("active_users", getActiveUserList());
+
+  // 💬 Ask if user wants bots (instead of auto-spawning)
+  const realPlayers = room.players.filter(p => !p.username.startsWith("bot"));
+  if (realPlayers.length === 1 && !roomBots[roomId]) {
+    const playerSocket = io.sockets.sockets.get(socket.id);
+    if (playerSocket) {
+      playerSocket.emit("prompt_add_bots", { room: roomId });
+    }
   }
 
-  if (r.players.length >= 2 && r.phase === "waiting") {
-    startGame(room);
+  // ▶️ Start game if ready
+  if (room.players.length >= 2 && room.phase === "waiting") {
+    setTimeout(() => {
+      if (rooms[roomId]?.phase === "waiting") {
+        startGame(roomId);
+      }
+    }, 2000); // give bots time to connect
   }
 
   callback?.({ success: true });
 });
+
+
+
+
 
 
   socket.on("submit_entry", ({ room, text }) => {
@@ -1119,49 +1340,60 @@ socket.on("join_room", ({ room }, callback) => {
 
 
 socket.on("leave_room", () => {
-    const room = socket.data?.room;
-    const username = socket.data?.username;
-    if (room && rooms[room]) {
-      rooms[room].players = rooms[room].players.filter(p => p.id !== socket.id);
-      emitToRoom(room, "players", rooms[room].players);
-      socket.leave(room);
-      socket.data.room = null;
-      activeUsers.set(username, "lobby");
-      io.emit("active_users", getActiveUserList());
-    }
-  });
-  
-  socket.on("disconnect", () => {
-  const username = socket.data?.username;
   const room = socket.data?.room;
+  const username = socket.data?.username;
 
-  if (username) {
-    console.log(`👋 ${username} disconnected`);
-    userSockets.delete(username);
-    activeUsers.set(username, "lobby");
-    userRooms[username] = "lobby";
+  if (!room || !rooms[room]) return;
+
+  const r = rooms[room];
+
+  // Remove player
+  r.players = r.players.filter(p => p.id !== socket.id);
+
+  // Reset score and faceoff score
+  if (r.scores) delete r.scores[username];
+  if (r.faceoff?.scores) delete r.faceoff.scores[username];
+
+  // Optional: also clean votes/entries
+  if (r.votes) delete r.votes[username];
+  if (Array.isArray(r.entries)) {
+    r.entries = r.entries.filter(e => e.username !== username);
   }
 
-  if (room && rooms[room]) {
-    // Remove the player from the room
-    rooms[room].players = rooms[room].players.filter((p) => p.id !== socket.id);
+  // Leave room and mark in lobby
+  socket.leave(room);
+  socket.data.room = null;
+  activeUsers.set(username, "lobby");
 
-    // Notify others in the room
-    emitToRoom(room, "players", rooms[room].players);
-
-    // If room is empty, clean it up
-    if (rooms[room].players.length === 0) {
-      console.log(`🧹 Room ${room} is now empty. Deleting room.`);
-      delete rooms[room];
-      delete roomRounds?.[room]; // safe optional chaining
-    }
-  }
-
-  // Broadcast updated active user list to everyone
+  emitToRoom(room, "players", r.players);
   io.emit("active_users", getActiveUserList());
+
+  // Force cleanup if empty
+  cleanupRoomIfEmpty(room);
 });
 
 
+
+  
+ socket.on("disconnect", () => {
+  const username = socket.data.username;
+  const room = socket.data.room || userRooms[username]; // fallback
+
+  if (username) {
+    activeUsers.delete(username);
+    delete userRooms[username];
+  }
+
+  if (room && rooms[room]) {
+    rooms[room].players = rooms[room].players.filter(p => p.username !== username);
+    delete rooms[room].scores?.[username]; // 👈 Optional fallback
+    emitToRoom(room, "players", rooms[room].players);
+
+    cleanupRoomIfEmpty(room);
+  }
+
+  io.emit("active_users", getActiveUserList());
+});
 
 
 });
@@ -1184,16 +1416,9 @@ setInterval(() => {
 }, 5000);
 
 setInterval(() => {
-  const stats = {};
-  for (const roomName in rooms) {
-    stats[roomName] = {
-      players: rooms[roomName].players.length,
-      round: rooms[roomName].round || 0,
-    };
-  }
+  const stats = getRoomStats();
   io.emit("room_list", stats);
-}, 1000);
-
+}, 5000);
 server.listen(3001, () => console.log("✅ Acrophobia backend running on port 3001"));
 
 
