@@ -3,8 +3,8 @@ const path = require("path");
 const fs = require("fs");
 const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
 const { english } = require("wordlist-english");
-const wordList = english["10"]; // Top 10,000 most common words
-const DICTIONARY = new Set(wordList.filter(w => w.length <= 10 && !w.endsWith('s')));
+const wordList = english["10"] || [];
+const DICTIONARY = new Set((Array.isArray(wordList) ? wordList : []).filter(w => typeof w === "string" && w.length <= 10 && !w.endsWith('s')));
 
 const SERVER_URL = process.env.SERVER_URL || "https://acrophobia-backend-2.onrender.com";
 const ROOM = process.env.ROOM || "room1";
@@ -67,9 +67,8 @@ function getWordForLetter(letter, index) {
   const dictPool = wordMapByLetter[upper] || [];
   const themePool = Array.isArray(wordBank[upper]) ? wordBank[upper] : [];
 
-  // Weighting: 60% theme, 40% dictionary
   const dictSample = dictPool.filter(w => w.length <= 10 && /^[a-zA-Z]+$/.test(w));
-  const themeSample = themePool.filter(w => w.length <= 10 && /^[a-zA-Z]+$/.test(w));
+  const themeSample = themePool.filter(w => typeof w === "string" && w.length <= 10 && /^[a-zA-Z]+$/.test(w));
 
   const pool = [];
   const maxLen = Math.max(dictSample.length, themeSample.length);
